@@ -5,7 +5,7 @@
   <title>Visitors Flea Market Rent Collection Map</title>
   <style>
     body {
-      margin: 0; 
+      margin: 0;
       padding: 0;
       font-family: sans-serif;
     }
@@ -31,7 +31,7 @@
       width: 20px;
       height: 20px;
       margin-right: 8px;
-      border: 2px solid #333; 
+      border: 2px solid #333;
       box-sizing: border-box;
     }
     .color-outline-red {
@@ -50,7 +50,7 @@
     /* Booth styling */
     .booth {
       position: absolute;
-      border: 2px solid #333; 
+      border: 2px solid #333;
       box-sizing: border-box;
       display: flex;
       justify-content: center;
@@ -58,7 +58,7 @@
       font-weight: bold;
       font-size: 12px;
       color: #000;
-      overflow: hidden; 
+      overflow: hidden;
       cursor: default; /* read-only example */
     }
 
@@ -66,13 +66,13 @@
     .booth:hover::after {
       content: attr(data-tooltip);
       position: absolute;
-      top: -40px; 
+      top: -50px;
       left: 0;
       padding: 4px 6px;
       background: rgba(0,0,0,0.8);
       color: #fff;
       font-size: 12px;
-      white-space: nowrap;
+      white-space: pre;  /* allow line breaks (\n) */
       pointer-events: none;
       transform: translateY(-100%);
     }
@@ -85,7 +85,7 @@
 <div id="legend">
   <h3>Legend</h3>
   <div class="legend-item">
-    <div class="color-box" style="background-color:red;"></div> 
+    <div class="color-box" style="background-color:red;"></div>
     <span>Past Due (No Payment This Week)</span>
   </div>
   <div class="legend-item">
@@ -113,22 +113,20 @@
 <div id="mapContainer"></div>
 
 <script>
-// We'll fetch the text file "map_layout.txt" (which contains VALID JSON text)
-fetch('map_layout.txt')
+// We'll fetch the JSON from "map_layout.json" in the same folder
+fetch('map_layout.json')
   .then(response => {
     if (!response.ok) {
-      throw new Error("Unable to load map_layout.txt: " + response.status);
+      throw new Error("Unable to load map_layout.json: " + response.status);
     }
-    return response.text();
+    return response.json();
   })
-  .then(txt => {
-    // Now we parse the text as JSON
-    const mapData = JSON.parse(txt);
+  .then(mapData => {
     initMap(mapData);
   })
   .catch(err => {
-    console.error("Failed to load map_layout.txt:", err);
-    alert("Error loading map_layout.txt. Check console for details.");
+    console.error("Failed to load map_layout.json:", err);
+    alert("Error loading map_layout.json. Check console for details.");
   });
 
 // 6 status color sets, matching your legend
@@ -141,15 +139,15 @@ const STATUS_COLORS = [
   { background: "lightblue", border: "#333"  }  // Company Storage
 ];
 
-function randomStatus(){
+function randomStatus() {
   return STATUS_COLORS[Math.floor(Math.random() * STATUS_COLORS.length)];
 }
 
-function initMap(mapData){
+function initMap(mapData) {
   // 1) Set container size from planeWidth & planeHeight
   const container = document.getElementById("mapContainer");
   container.style.width  = mapData.planeWidth + "px";
-  container.style.height = mapData.planeHeight+ "px";
+  container.style.height = mapData.planeHeight + "px";
 
   // 2) For each booth in the JSON, create a booth div
   mapData.booths.forEach(b => {
@@ -166,9 +164,9 @@ function initMap(mapData){
     boothEl.style.backgroundColor = status.background;
     boothEl.style.borderColor     = status.border;
 
-    // 4) Add a tooltip with placeholder info
-    // e.g. "Vendor Name: Vendor #\nLease End: 12/31/2025\nAmount Behind: $123.45"
-    const tooltipText = `Vendor Name: Vendor ${b.label}\nLease End: 12/31/2025\nAmount Behind: $123.45`;
+    // 4) Add a hover tooltip with "Food Truck Vendor\n$0.00 past due\nLease expires 01/01/2025"
+    // Note we use \n and 'white-space: pre;' in CSS so line breaks show
+    const tooltipText = "Food Truck Vendor\n$0.00 past due\nLease expires 01/01/2025";
     boothEl.setAttribute("data-tooltip", tooltipText);
 
     // 5) Append to container
