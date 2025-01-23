@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Map Builder: Multi-Select (Shift-Click), Group Drag, Snap, Select All</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+    }
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: #eee;
+    }
+    #map {
+      position: relative;
+      margin: 0 auto;
+      background: #fff;
+      border: 2px solid #ccc;
+      cursor: crosshair; /* for empty-plane clicks */
+    }
+
+    .booth {
+      position: absolute;
+      background-color: rgba(0,0,255,0.2);
+      border: 2px solid #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      color: #000;
+      box-sizing: border-box;
+      user-select: none;
+      cursor: move; /* for dragging */
+      font-size: 12px;  
+      white-space: nowrap; 
+      overflow: hidden;    
+      text-overflow: ellipsis;
+    }
+    .booth:hover {
+      border-color: red;
+    }
+    .selected {
+      outline: 2px dashed red;
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div>
+    <label>Plane Width:</label>
+    <input type="number" id="planeWidth" value="600" style="width:70px;">
+    <label>Plane Height:</label>
+    <input type="number" id="planeHeight" value="1000" style="width:70px;">
+    <button id="applyPlaneBtn">Apply Plane Size</button>
+  </div>
+
+  <div>
+    <label>Box Size:</label>
+    <select id="sizeSelect">
+      <option value="10x10">10×10 ft</option>
+      <option value="10x20">10×20 ft</option>
+      <option value="6.66x10">6.66×10 (horizontal fix)</option>
+    </select>
+  </div>
+
+  <div>
+    <label>Label:</label>
+    <input type="text" id="labelInput" placeholder="e.g. 34-A">
+  </div>
+
+  <button id="undoBtn">Undo</button>
+  <button id="selectAllBtn">Select All</button>
+  <button id="loadBtn">Load JSON</button>
+  <button id="exportBtn">Export JSON</button>
+</div>
+
+<div id="map"></div>
+<input type="file" id="fileInput" accept=".json" style="display:none;" />
+
+<script>
+//////////////// CONFIG ////////////////
+const FT_TO_PX = 4; 
+const SIZE_OPTIONS = {
+  "10x10":  { wFt:10, hFt:10 },
+  "10x20":  { wFt:20, hFt:10 },
+  "6.66x10":{ wFt:10, hFt:6.66 } 
+};
+const SNAP_THRESHOLD=10, DRAG_THRESHOLD=5;
+
+let nextBoothNumber=1;
+const booths=[];
+let selectedBooths=new Set();
+
+//////////////// DOM ////////////////
+const mapEl=document.getElementById("map");
+const planeWidthEl=document.getElementById("planeWidth");
+const planeHeightEl=document.getElementById("planeHeight");
+const applyPlaneBtn=document.getElementById("applyPlaneBtn");
+const sizeSelect=document.getElementById("sizeSelect");
+const labelInput=document.getElementById("labelInput");
+const undoBtn=document.getElementById("undoBtn");
+const selectAllBtn=document.getElementById("selectAllBtn");
+const loadBtn=document.getElementById("loadBtn");
+const exportBtn=document.getElementById("exportBtn");
+const fileInput=document.getElementById("fileInput");
+
+//////////////// PLANE SIZE ////////////////
+applyPlaneBtn.addEventListener("click", ()=>{
+  const w=parseInt(planeWidthEl.value,10)||600;
+  const h=parseInt(planeHeightEl.value,10)||1000;
+  mapEl.style.width=w+"px"; mapEl.style.height=h+"px";
+  booths.forEach(b=>{
+    if(b.x+b.width>w){b.x=Math.max(0,w-b.width); b.element.style.left=b.x+"px";}
+    if(b.y+b.height>h){b.y=Math.max(0,h-b.height); b.element.style.top=b.y+"px";}
+  });
+});
+applyPlaneBtn.click(); // init
+
+//////////////// SELECT ALL ////////////////
+selectAllBtn.addEventListener("click", ()=>{
+  clearSelection(); 
+  booths.forEach(booth=>{
+    selectedBooths.add(booth);
+    booth.element.classList.add("selected");
+  });
+});
+
+//////////////// MOUSE STATE ////////////////
+let isDragging=false, didMove=false;
+let mouseDownX=0, mouseDownY=0;
+
+// single booth
+let isDraggingBooth=false, currentBooth=null, dragOffsetX=0, dragOffsetY=0;
+
+// group drag
+let isDraggingGroup=false, groupOffsets=[];
+
+//////////////// MOUSEDOWN ////////////////
+mapEl.addEventListener("mousedown", e=>{
+  const rect=mapEl.getBoundingClientRect();
+  mouseDownX=e.clientX-rect.left;
+  mouseDownY=e.clientY-rect.top;
+  didMove=false;
+  isDragging=true;
+
+  // SHIFT+Click on empty => clear selection
+  if(e.shiftKey && !e.target.classList.contains("booth")){
+    clearSelection();
+    return;
+  }
+
+  if(e.target.classList.contains("booth")){
+    const booth=getBoothByElement(e.target);
+    if(!booth) return;
+
+    // SHIFT => toggle
+    if(e.shiftKey){
+      toggleBoothSelection(booth);
+    } else {
+      // normal click => if not in set => clear old & select
+      if(!selectedBooths.has(booth)){
+        clearSelection(); 
+        selectBooth(booth);
+      }
+    }
+
+    // multiple => group drag
+    if(selectedBooths.size>1){
+      isDraggingGroup=true;
+      groupOffsets=[];
+      selectedBooths.forEach(sb=>{
+        groupOffsets.push({
+          booth:sb,
+          offsetX: sb.x - mouseDownX,
+          offsetY: sb.y - mouseDownY
+        });
+      });
+    } else {
+      // single booth
+      isDraggingBooth=true;
+      currentBooth=booth;
+      const br=e.target.getBoundingClientRect();
+      dragOffsetX=e.clientX-br.left; 
+      dragOffsetY=e.clientY-br.top;
+    }
+    e.stopPropagation();
+  }
+});
+
+//////////////// MOUSEMOVE ////////////////
+mapEl.addEventListener("mousemove", e=>{
+  if(!isDragging)return;
+
+  const rect=mapEl.getBoundingClientRect();
+  const mouseX=e.clientX-rect.left;
+  const mouseY=e.clientY-rect.top;
+
+  const dx=mouseX-mouseDownX;
+  const dy=mouseY-mouseDownY;
+  if(Math.abs(dx)>DRAG_THRESHOLD||Math.abs(dy)>DRAG_THRESHOLD){
+    didMove=true;
+  }
+
+  // group drag => no snap
+  if(isDraggingGroup){
+    if(didMove){
+      groupOffsets.forEach(go=>{
+        let bx=mouseX + go.offsetX;
+        let by=mouseY + go.offsetY;
+        const w=parseInt(planeWidthEl.value,10)||600;
+        const h=parseInt(planeHeightEl.value,10)||1000;
+        if(bx<0)bx=0;if(by<0)by=0;
+        if(bx+go.booth.width>w) bx=w-go.booth.width;
+        if(by+go.booth.height>h)by=h-go.booth.height;
+        go.booth.x=bx; go.booth.y=by;
+        go.booth.element.style.left=bx+"px";
+        go.booth.element.style.top =by+"px";
+      });
+    }
+    return;
+  }
+
+  // single booth => snap
+  if(isDraggingBooth && currentBooth){
+    if(didMove){
+      let newX=mouseX-dragOffsetX;
+      let newY=mouseY-dragOffsetY;
+      const snapped=snapCoordinates(newX,newY,currentBooth.width,currentBooth.height,currentBooth);
+      currentBooth.x=snapped.x; 
+      currentBooth.y=snapped.y;
+      currentBooth.element.style.left=snapped.x+"px";
+      currentBooth.element.style.top =snapped.y+"px";
+    }
+  }
+});
+
+//////////////// MOUSEUP ////////////////
+mapEl.addEventListener("mouseup", e=>{
+  if(!isDragging)return;
+  isDragging=false;
+
+  if(!didMove && !isDraggingBooth && !isDraggingGroup){
+    placeBoothAtClick(e);
+  }
+  if(isDraggingBooth){ isDraggingBooth=false; currentBooth=null; }
+  if(isDraggingGroup){ isDraggingGroup=false; groupOffsets=[]; }
+});
+
+mapEl.addEventListener("mouseleave", e=>{
+  if(isDragging){
+    isDragging=false;
+    if(!didMove && !isDraggingBooth && !isDraggingGroup){
+      placeBoothAtClick(e);
+    }
+  }
+  if(isDraggingBooth){ isDraggingBooth=false; currentBooth=null; }
+  if(isDraggingGroup){ isDraggingGroup=false; groupOffsets=[]; }
+});
+
+//////////////// SHIFT + MULTISELECT ////////////////
+function toggleBoothSelection(booth){
+  if(selectedBooths.has(booth)){
+    selectedBooths.delete(booth);
+    booth.element.classList.remove("selected");
+  } else {
+    selectedBooths.add(booth);
+    booth.element.classList.add("selected");
+  }
+}
+function selectBooth(booth){
+  selectedBooths.add(booth);
+  booth.element.classList.add("selected");
+}
+function clearSelection(){
+  selectedBooths.forEach(b=>{
+    b.element.classList.remove("selected");
+  });
+  selectedBooths.clear();
+}
+
+//////////////// PLACE BOOTH ////////////////
+function placeBoothAtClick(e){
+  const rect=mapEl.getBoundingClientRect();
+  const mouseX=e.clientX-rect.left;
+  const mouseY=e.clientY-rect.top;
+
+  const choice=SIZE_OPTIONS[sizeSelect.value];
+  const boothW=Math.round(choice.wFt*FT_TO_PX);
+  const boothH=Math.round(choice.hFt*FT_TO_PX);
+
+  const w=parseInt(planeWidthEl.value,10)||600;
+  const h=parseInt(planeHeightEl.value,10)||1000;
+  let x=mouseX,y=mouseY;
+  if(x+boothW>w)x=w-boothW;
+  if(y+boothH>h)y=h-boothH;
+
+  const custom=labelInput.value.trim();
+  let boothLabel= custom|| String(nextBoothNumber++);
+  createBooth(boothLabel,x,y,boothW,boothH);
+  labelInput.value="";
+}
+
+//////////////// CREATE BOOTH (+ right-click remove) ////////////////
+function createBooth(label,x,y,w,h){
+  const div=document.createElement("div");
+  div.className="booth";
+  div.style.left=x+"px";
+  div.style.top=y+"px";
+  div.style.width=w+"px";
+  div.style.height=h+"px";
+  div.textContent=label;
+
+  const booth={ label,x,y,width:w,height:h, element:div };
+
+  div.addEventListener("contextmenu", evt=>{
+    evt.preventDefault();
+    removeBooth(booth);
+  });
+  booths.push(booth);
+  mapEl.appendChild(div);
+}
+
+function removeBooth(booth){
+  selectedBooths.delete(booth);
+  const idx=booths.indexOf(booth);
+  if(idx>=0) booths.splice(idx,1);
+  mapEl.removeChild(booth.element);
+
+  const numeric=parseInt(booth.label,10);
+  if(!isNaN(numeric)&& numeric===(nextBoothNumber-1)){
+    nextBoothNumber--;
+  }
+}
+
+//////////////// SINGLE BOOTH SNAP ////////////////
+function snapCoordinates(rawX,rawY,w,h,ignoreBooth=null){
+  let x=rawX,y=rawY;
+  booths.forEach(b=>{
+    if(ignoreBooth&& b===ignoreBooth)return;
+    const bLeft=b.x, bRight=b.x+b.width, bTop=b.y, bBottom=b.y+b.height;
+    if(Math.abs(x-bRight)<=SNAP_THRESHOLD) x=bRight;
+    if(Math.abs((x+w)-bLeft)<=SNAP_THRESHOLD) x=bLeft-w;
+    if(Math.abs(x-bLeft)<=SNAP_THRESHOLD) x=bLeft;
+    if(Math.abs((x+w)-bRight)<=SNAP_THRESHOLD) x=bRight-w;
+
+    if(Math.abs(y-bBottom)<=SNAP_THRESHOLD) y=bBottom;
+    if(Math.abs((y+h)-bTop)<=SNAP_THRESHOLD) y=bTop-h;
+    if(Math.abs(y-bTop)<=SNAP_THRESHOLD) y=bTop;
+    if(Math.abs((y+h)-bBottom)<=SNAP_THRESHOLD) y=bBottom-h;
+  });
+  const planeW=parseInt(planeWidthEl.value,10)||600;
+  const planeH=parseInt(planeHeightEl.value,10)||1000;
+  if(x<0)x=0;if(y<0)y=0;
+  if(x+w>planeW)x=planeW-w;
+  if(y+h>planeH)y=planeH-h;
+  return {x,y};
+}
+function getBoothByElement(el){
+  return booths.find(b=>b.element===el);
+}
+
+//////////////// UNDO = remove last created ////////////////
+undoBtn.addEventListener("click", ()=>{
+  if(booths.length>0){
+    const last=booths.pop();
+    selectedBooths.delete(last);
+    mapEl.removeChild(last.element);
+    const numeric=parseInt(last.label,10);
+    if(!isNaN(numeric)&& numeric===(nextBoothNumber-1)){
+      nextBoothNumber--;
+    }
+  }
+});
+
+//////////////// LOAD JSON ////////////////
+const hiddenFileInput=document.createElement("input");
+hiddenFileInput.type="file";
+hiddenFileInput.accept=".json";
+hiddenFileInput.style.display="none";
+document.body.appendChild(hiddenFileInput);
+
+loadBtn.addEventListener("click", ()=>{
+  hiddenFileInput.click();
+});
+hiddenFileInput.addEventListener("change", e=>{
+  if(!hiddenFileInput.files || !hiddenFileInput.files[0])return;
+  const file=hiddenFileInput.files[0];
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      planeWidthEl.value=data.planeWidth||600;
+      planeHeightEl.value=data.planeHeight||1000;
+      applyPlaneBtn.click();
+      data.booths.forEach(bData=> createBoothFromJSON(bData));
+    }catch(err){
+      alert("Error loading JSON: "+err);
+    }
+    hiddenFileInput.value="";
+  };
+  reader.readAsText(file);
+});
+
+function createBoothFromJSON(bData){
+  const div=document.createElement("div");
+  div.className="booth";
+  div.style.left=bData.x+"px";
+  div.style.top=bData.y+"px";
+  div.style.width=bData.width+"px";
+  div.style.height=bData.height+"px";
+  div.textContent=bData.label;
+
+  const booth={
+    label:bData.label, x:bData.x, y:bData.y,
+    width:bData.width, height:bData.height, element:div
+  };
+  div.addEventListener("contextmenu", evt=>{
+    evt.preventDefault(); removeBooth(booth);
+  });
+  booths.push(booth);
+  mapEl.appendChild(div);
+
+  const numeric=parseInt(bData.label,10);
+  if(!isNaN(numeric)&& numeric>=nextBoothNumber){
+    nextBoothNumber=numeric+1;
+  }
+}
+
+//////////////// EXPORT JSON ////////////////
+exportBtn.addEventListener("click", ()=>{
+  const planeW=parseInt(planeWidthEl.value,10)||600;
+  const planeH=parseInt(planeHeightEl.value,10)||1000;
+  const data={
+    planeWidth: planeW,
+    planeHeight:planeH,
+    booths: booths.map(b=>({
+      label:b.label, 
+      x:b.x,
+      y:b.y,
+      width:b.width,
+      height:b.height
+    }))
+  };
+  const json=JSON.stringify(data,null,2);
+  const blob=new Blob([json],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="map_layout.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
