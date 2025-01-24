@@ -5,7 +5,7 @@
   <title>Visitors Flea Market Rent Collection Map</title>
   <style>
     body {
-      margin: 0;
+      margin: 0; 
       padding: 0;
       font-family: sans-serif;
     }
@@ -31,7 +31,7 @@
       width: 20px;
       height: 20px;
       margin-right: 8px;
-      border: 2px solid #333;
+      border: 2px solid #333; 
       box-sizing: border-box;
     }
     .color-outline-red {
@@ -59,7 +59,7 @@
       font-size: 12px;
       color: #000;
       overflow: hidden;
-      cursor: default; /* read-only example */
+      cursor: pointer; /* IMPORTANT: now booths are clearly clickable */
     }
 
     /* Simple tooltip on hover, using data-tooltip attribute */
@@ -72,7 +72,7 @@
       background: rgba(0,0,0,0.8);
       color: #fff;
       font-size: 12px;
-      white-space: pre;  /* allow line breaks (\n) */
+      white-space: pre;  /* so \n become line breaks */
       pointer-events: none;
       transform: translateY(-100%);
     }
@@ -85,7 +85,7 @@
 <div id="legend">
   <h3>Legend</h3>
   <div class="legend-item">
-    <div class="color-box" style="background-color:red;"></div>
+    <div class="color-box" style="background-color:red;"></div> 
     <span>Past Due (No Payment This Week)</span>
   </div>
   <div class="legend-item">
@@ -113,10 +113,10 @@
 <div id="mapContainer"></div>
 
 <script>
-// We'll fetch the JSON from "map_layout.json" in the same folder
+// We'll fetch the JSON from "map_layout.json"
 fetch('map_layout.json')
   .then(response => {
-    if (!response.ok) {
+    if (!response.ok){
       throw new Error("Unable to load map_layout.json: " + response.status);
     }
     return response.json();
@@ -139,15 +139,15 @@ const STATUS_COLORS = [
   { background: "lightblue", border: "#333"  }  // Company Storage
 ];
 
-function randomStatus() {
+function randomStatus(){
   return STATUS_COLORS[Math.floor(Math.random() * STATUS_COLORS.length)];
 }
 
-function initMap(mapData) {
+function initMap(mapData){
   // 1) Set container size from planeWidth & planeHeight
   const container = document.getElementById("mapContainer");
   container.style.width  = mapData.planeWidth + "px";
-  container.style.height = mapData.planeHeight + "px";
+  container.style.height = mapData.planeHeight+ "px";
 
   // 2) For each booth in the JSON, create a booth div
   mapData.booths.forEach(b => {
@@ -164,12 +164,16 @@ function initMap(mapData) {
     boothEl.style.backgroundColor = status.background;
     boothEl.style.borderColor     = status.border;
 
-    // 4) Add a hover tooltip with "Food Truck Vendor\n$0.00 past due\nLease expires 01/01/2025"
-    // Note we use \n and 'white-space: pre;' in CSS so line breaks show
+    // 4) Hover tooltip text
     const tooltipText = "Food Truck Vendor\n$0.00 past due\nLease expires 01/01/2025";
     boothEl.setAttribute("data-tooltip", tooltipText);
 
-    // 5) Append to container
+    // 5) Make them clickable: show alert with same info
+    boothEl.addEventListener("click", () => {
+      alert(`Booth #${b.label}\nFood Truck Vendor\n$0.00 past due\nLease expires 01/01/2025`);
+    });
+
+    // 6) Append to container
     container.appendChild(boothEl);
   });
 }
