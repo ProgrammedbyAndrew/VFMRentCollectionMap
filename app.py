@@ -7,7 +7,7 @@ from occupant_service import get_leases_data
 
 app = Flask(__name__)
 
-# Keep your custom Jinja delimiters (unchanged)
+# Keep your custom Jinja delimiters
 app.jinja_options = {
     'block_start_string': '(%',
     'block_end_string': '%)',
@@ -21,7 +21,7 @@ app.jinja_options = {
 def index():
     # 1) occupant data, filter for "Visitors Flea Market"
     all_data = get_leases_data()
-    filtered = [r for r in all_data if r["property_name"]=="Visitors Flea Market"]
+    filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
     for row in filtered:
         print(row)
@@ -38,7 +38,7 @@ def index():
     booths = []
     if map_data:
         planeW = map_data.get("planeWidth", 600)
-        planeH = map_data.get("planeHeight", 1000)
+        planeH = map_data.get("planeHeight",1000)
         booths = map_data.get("booths", [])
 
     # occupant_map => { booth_label: [ occupantData,... ] }
@@ -83,15 +83,15 @@ def index():
                 else:
                     b["color"] = "green"
 
-    # 4) Final HTML w/ minimal extra for mobile scaling
-    html_template = """
+    # 4) Final HTML w/ just a short scaling step in JS
+    html_template= """
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <!-- Added for mobile responsiveness: -->
+  <!-- IMPORTANT for mobile responsiveness -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
+
   <title>VFM - Map Only w/ .env API keys</title>
   <style>
   body {
@@ -118,8 +118,9 @@ def index():
     margin: 0 auto;
     border: 2px solid #333;
     background: #fff;
-    max-width: 100%; /* keep container from exceeding screen width */
+    max-width: 100%;
     position: relative;
+    /* We'll set planeWidth × planeHeight inline, as you do below */
   }
   .booth {
     position: absolute;
@@ -159,16 +160,14 @@ def index():
   </div>
 
   (% if booths|length > 0 %)
-    <!-- Same inline style for the map's absolute pixel size: -->
+    <!-- Same inline style for pixel size -->
     <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
-    
     <script>
     function initMap() {
       let planeWidth  = __PW__;
       let planeHeight = __PH__;
       const ctn = document.getElementById("mapContainer");
 
-      // same occupant code
       ctn.style.width  = planeWidth + "px";
       ctn.style.height = planeHeight + "px";
 
@@ -205,9 +204,12 @@ def index():
 
         ctn.appendChild(div);
       });
-      
-      // NEW: If screen is narrower than planeWidth, scale the container
-      let actualWidth = ctn.clientWidth; // or parentNode.clientWidth
+
+      // NEW: If the container is wider than the phone screen, scale to fit
+      // We'll compare planeWidth to container's parent width (or screen width).
+      let containerParent = ctn.parentNode; // or document.body
+      let actualWidth = containerParent.clientWidth;
+      // If phone is narrower than planeWidth => scale it
       if (planeWidth > 0 && actualWidth < planeWidth) {
         let scale = actualWidth / planeWidth;
         ctn.style.transformOrigin = "top left";
