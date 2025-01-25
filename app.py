@@ -7,7 +7,7 @@ from occupant_service import get_leases_data
 
 app = Flask(__name__)
 
-# Keep your custom Jinja delimiters
+# Keep your custom Jinja delimiters (unchanged)
 app.jinja_options = {
     'block_start_string': '(%',
     'block_end_string': '%)',
@@ -29,31 +29,31 @@ def index():
     # 2) load map_layout.json
     try:
         with open("map_layout.json","r") as f:
-            map_data= json.load(f)
+            map_data = json.load(f)
     except:
-        map_data= None
+        map_data = None
 
-    planeW=600
-    planeH=1000
-    booths=[]
+    planeW = 600
+    planeH = 1000
+    booths = []
     if map_data:
-        planeW= map_data.get("planeWidth",600)
-        planeH= map_data.get("planeHeight",1000)
-        booths= map_data.get("booths",[])
+        planeW = map_data.get("planeWidth", 600)
+        planeH = map_data.get("planeHeight", 1000)
+        booths = map_data.get("booths", [])
 
     # occupant_map => { booth_label: [ occupantData,... ] }
-    occupant_map={}
+    occupant_map = {}
     for row in filtered:
-        occupant= row["occupant_name"]
-        loc_str= row["location"].strip()
-        bal= row["balance"]
-        lease_id= row["lease_id"]
-        end_date= row["lease_end_date"]
+        occupant = row["occupant_name"]
+        loc_str  = row["location"].strip()
+        bal      = row["balance"]
+        lease_id = row["lease_id"]
+        end_date = row["lease_end_date"]
 
-        if loc_str!="N/A" and loc_str!="":
-            booth_list= loc_str.split()
+        if loc_str != "N/A" and loc_str != "":
+            booth_list = loc_str.split()
             for b_label in booth_list:
-                occupant_map.setdefault(b_label,[]).append({
+                occupant_map.setdefault(b_label, []).append({
                     "occupant_name": occupant,
                     "lease_id": lease_id,
                     "lease_end": end_date,
@@ -62,8 +62,8 @@ def index():
 
     # 3) Color code the booths & assign occupant array
     for b in booths:
-        label= b.get("label","").strip()
-        occupant_list= occupant_map.get(label,[])
+        label = b.get("label","").strip()
+        occupant_list = occupant_map.get(label, [])
         if not occupant_list:
             # vacant => gray
             b["color"] = "gray"
@@ -83,13 +83,15 @@ def index():
                 else:
                     b["color"] = "green"
 
-    # 4) Final HTML w/ legend + placeholders
-    html_template= """
+    # 4) Final HTML w/ minimal extra for mobile scaling
+    html_template = """
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
+  <!-- Added for mobile responsiveness: -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
   <title>VFM - Map Only w/ .env API keys</title>
   <style>
   body {
@@ -116,7 +118,7 @@ def index():
     margin: 0 auto;
     border: 2px solid #333;
     background: #fff;
-    max-width: 100%;
+    max-width: 100%; /* keep container from exceeding screen width */
     position: relative;
   }
   .booth {
@@ -157,50 +159,62 @@ def index():
   </div>
 
   (% if booths|length > 0 %)
+    <!-- Same inline style for the map's absolute pixel size: -->
     <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+    
     <script>
     function initMap() {
-      let planeWidth = __PW__;
-      let planeHeight= __PH__;
+      let planeWidth  = __PW__;
+      let planeHeight = __PH__;
       const ctn = document.getElementById("mapContainer");
+
+      // same occupant code
       ctn.style.width  = planeWidth + "px";
       ctn.style.height = planeHeight + "px";
 
-      const data= __BOOTH_JSON__;
+      const data = __BOOTH_JSON__;
       data.forEach(b => {
-        const div= document.createElement("div");
-        div.className= "booth";
-        div.style.left = b.x+"px";
-        div.style.top  = b.y+"px";
-        div.style.width= b.width+"px";
-        div.style.height=b.height+"px";
+        const div = document.createElement("div");
+        div.className = "booth";
+        div.style.left   = b.x + "px";
+        div.style.top    = b.y + "px";
+        div.style.width  = b.width + "px";
+        div.style.height = b.height + "px";
 
-        div.style.backgroundColor= b.color||"gray";
-        div.textContent= b.label;
+        div.style.backgroundColor = b.color || "gray";
+        div.textContent = b.label;
 
-        let occList= b.occupants||[];
-        if(occList.length>0) {
-          let info= occList.map(o=>{
+        let occList = b.occupants || [];
+        if (occList.length > 0) {
+          let info = occList.map(o => {
             return (
-              "LeaseID: " + o.lease_id + "\\n"+
-              "Occupant: " + o.occupant_name + "\\n"+
-              "End: " + o.lease_end + "\\n"+
-              "Balance: $"+ o.balance.toFixed(2)
+              "LeaseID: " + o.lease_id + "\\n" +
+              "Occupant: " + o.occupant_name + "\\n" +
+              "End: " + o.lease_end + "\\n" +
+              "Balance: $" + o.balance.toFixed(2)
             );
           }).join("\\n----\\n");
-          div.onclick= ()=>{
-            alert("Booth "+ b.label + "\\n"+ info);
+          div.onclick = () => {
+            alert("Booth " + b.label + "\\n" + info);
           }
         } else {
-          div.onclick= ()=>{
-            alert("Booth "+ b.label + "\\nVacant");
+          div.onclick = () => {
+            alert("Booth " + b.label + "\\nVacant");
           }
         }
 
         ctn.appendChild(div);
       });
+      
+      // NEW: If screen is narrower than planeWidth, scale the container
+      let actualWidth = ctn.clientWidth; // or parentNode.clientWidth
+      if (planeWidth > 0 && actualWidth < planeWidth) {
+        let scale = actualWidth / planeWidth;
+        ctn.style.transformOrigin = "top left";
+        ctn.style.transform       = "scale(" + scale + ")";
+      }
     }
-    window.onload= initMap;
+    window.onload = initMap;
     </script>
   (% else %)
     <p>No map_layout.json or no booths found.</p>
@@ -210,13 +224,13 @@ def index():
     """
 
     from json import dumps
-    booth_json_str= dumps(booths)
+    booth_json_str = dumps(booths)
 
     # same text replacements
-    rendered= render_template_string(html_template, booths=booths)
-    rendered= rendered.replace("__PW__", str(planeW))
-    rendered= rendered.replace("__PH__", str(planeH))
-    rendered= rendered.replace("__BOOTH_JSON__", booth_json_str)
+    rendered = render_template_string(html_template, booths=booths)
+    rendered = rendered.replace("__PW__", str(planeW))
+    rendered = rendered.replace("__PH__", str(planeH))
+    rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
 
