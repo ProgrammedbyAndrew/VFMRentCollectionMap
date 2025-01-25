@@ -6,7 +6,7 @@ import requests
 from flask import Flask, render_template_string
 
 ############################################################################
-# A) CUSTOM JINJA DELIMITERS
+# 1) Custom Jinja delimiters
 ############################################################################
 app = Flask(__name__)
 app.jinja_options = {
@@ -19,9 +19,8 @@ app.jinja_options = {
 }
 
 ############################################################################
-# B) BUILDUM FETCH CODE (unchanged)
+# 2) Buildium fetch logic
 ############################################################################
-
 BUILDIUM_CLIENT_ID = "77131864-17a2-4460-a12b-0bcbe22051bf"
 BUILDIUM_CLIENT_SECRET = "pt0yNFdfIjPDyT9ftL2F3gh2fAmFlDVtsElPJhe5QuI="
 
@@ -37,8 +36,8 @@ headers = {
 }
 
 def fetch_all_leases(lease_statuses=("Active",)):
-    offset=0
-    limit=100
+    offset = 0
+    limit  = 100
     all_leases=[]
     while True:
         params={"offset":offset,"limit":limit,"leasestatuses":list(lease_statuses)}
@@ -62,12 +61,12 @@ def fetch_outstanding_balances(lease_statuses=("Active",)):
     all_balances=[]
     while True:
         params={"offset":offset,"limit":limit,"leasestatuses":list(lease_statuses)}
-        r= requests.get(OUTSTANDING_BALANCES_URL, headers=headers, params=params)
+        r=requests.get(OUTSTANDING_BALANCES_URL, headers=headers, params=params)
         try:
             r.raise_for_status()
         except:
             break
-        batch= r.json()
+        batch=r.json()
         if not batch:
             break
         all_balances.extend(batch)
@@ -82,7 +81,7 @@ def fetch_all_units():
     all_units=[]
     while True:
         params={"offset":offset,"limit":limit}
-        r= requests.get(UNITS_URL, headers=headers, params=params)
+        r=requests.get(UNITS_URL, headers=headers, params=params)
         try:
             r.raise_for_status()
         except:
@@ -102,7 +101,7 @@ def fetch_all_properties():
     all_props=[]
     while True:
         params={"offset":offset,"limit":limit}
-        r= requests.get(PROPERTIES_URL, headers=headers, params=params)
+        r=requests.get(PROPERTIES_URL, headers=headers, params=params)
         try:
             r.raise_for_status()
         except:
@@ -122,10 +121,10 @@ def get_units_map():
 
 def get_property_map():
     props= fetch_all_properties()
-    return { p["Id"]: p.get("Name","Unknown Property") for p in props if "Id" in p }
+    return {p["Id"]: p.get("Name","Unknown Property") for p in props if "Id" in p}
 
 ############################################################################
-# C) MERGE occupant => location
+# 3) Merging occupant => location from AddressLine1
 ############################################################################
 def get_leases_data():
     leases= fetch_all_leases(["Active"])
@@ -134,14 +133,13 @@ def get_leases_data():
 
     balances= fetch_outstanding_balances(["Active"])
     bal_map= {b["LeaseId"]: b.get("TotalBalance",0.0) for b in balances}
-
     units_map= get_units_map()
     prop_map= get_property_map()
 
     data=[]
     for lease in leases:
         lease_id= lease.get("Id")
-        occupant_name= lease.get("UnitNumber","Unknown")
+        occupant= lease.get("UnitNumber","Unknown")
         end_date= lease.get("LeaseToDate","N/A")
         property_id= lease.get("PropertyId")
         property_name= prop_map.get(property_id,"Unknown Property")
@@ -150,47 +148,48 @@ def get_leases_data():
         potential_unit_id= lease.get("RentalUnitId")
         unit_info=None
         if potential_unit_id and potential_unit_id in units_map:
-            unit_info= units_map[potential_unit_id]
+            unit_info=units_map[potential_unit_id]
         else:
             for u in units_map.values():
-                if u.get("UnitNumber")== occupant_name:
+                if u.get("UnitNumber")== occupant:
                     unit_info=u
                     break
 
         if unit_info:
             addr= unit_info.get("Address",{})
-            location= addr.get("AddressLine1","")
-            if not location:
-                location="N/A"
+            loc= addr.get("AddressLine1","")
+            if not loc:
+                loc="N/A"
         else:
-            location="N/A"
+            loc="N/A"
 
         data.append({
             "lease_id": lease_id,
-            "unit_number": occupant_name,
+            "occupant_name": occupant,
             "lease_end_date": end_date,
-            "location": location,   # multiple? "41 42"
+            "location": loc,  # multiple => "41 42"
             "balance": bal,
             "property_name": property_name
         })
     return data
 
 ############################################################################
-# D) MAIN ROUTE: Filter "Visitors Flea Market", handle multi-booths, map
+# 4) MAIN ROUTE: Show only a map, occupant data in popups, mobile-friendly
 ############################################################################
 @app.route("/")
 def index():
+    # 1) fetch occupant data & filter
     all_data= get_leases_data()
-    # filter
-    data_rows=[r for r in all_data if r["property_name"]=="Visitors Flea Market"]
+    filtered= [r for r in all_data if r["property_name"]=="Visitors Flea Market"]
 
-    print("\n=== VISITORS FLEA MARKET ONLY ===")
-    for row in data_rows:
+    print("\n=== VISITORS FLEA MARKET occupant data (map only, mobile-centered) ===")
+    for row in filtered:
         print(row)
 
+    # 2) load map_layout.json
     try:
         with open("map_layout.json","r") as f:
-            map_data=json.load(f)
+            map_data= json.load(f)
     except:
         map_data=None
 
@@ -202,9 +201,10 @@ def index():
         planeH= map_data.get("planeHeight",1000)
         booths= map_data.get("booths",[])
 
+    # occupant_map => { booth_label: [ occupantData, ... ] }
     occupant_map={}
-    for row in data_rows:
-        occupant= row["unit_number"]
+    for row in filtered:
+        occupant= row["occupant_name"]
         loc_str= row["location"].strip()
         bal= row["balance"]
         lease_id= row["lease_id"]
@@ -215,11 +215,12 @@ def index():
             for b_label in booth_list:
                 occupant_map.setdefault(b_label,[]).append({
                     "occupant_name": occupant,
-                    "balance": bal,
                     "lease_id": lease_id,
-                    "lease_end": end_date
+                    "lease_end": end_date,
+                    "balance": bal
                 })
 
+    # Merge occupant => booth
     for b in booths:
         label= b.get("label","").strip()
         occupant_list= occupant_map.get(label,[])
@@ -230,44 +231,36 @@ def index():
             b["color"]="gray"
             b["occupants"]=[]
 
-    # Because we have custom delimiters:
-    #  - block:  (% ... %)
-    #  - var:    (( ... ))
-    # We'll code the template accordingly.
+    #####################################################################
+    # Mobile-friendly, centered map: 
+    #   - meta name="viewport"
+    #   - #mapContainer { margin:0 auto; max-width:100%; etc. }
+    #   - we keep planeWidth x planeHeight from the JSON 
+    #   - user might still scroll if planeWidth> phone width, 
+    #     but at least it's centered, doesn't overflow horizontally, 
+    #     and is as "friendly" as possible with minimal code changes.
+    #####################################################################
     html_template= """
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <title>VFM - changed delimiters (no raw block needed)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VFM - Map Only, Mobile & Centered</title>
   <style>
   body {
     font-family: sans-serif;
     margin: 20px;
   }
-  .flex-container {
-    display: flex;
-    gap: 20px;
-  }
-  .half {
-    flex: 1;
-  }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  th, td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #ccc;
-  }
-  th {
-    background: #f0f0f0;
-    text-align: left;
-  }
   #mapContainer {
-    position: relative;
+    display: block;
+    margin: 0 auto;              /* center on wide screens */
     border: 2px solid #333;
     background: #fff;
+    max-width: 100%;            /* shrink if screen is narrower than planeWidth */
+    position: relative;
+    /* If you want a fixed ratio approach, you'd do more CSS here, 
+       but let's keep it straightforward. */
   }
   .booth {
     position: absolute;
@@ -284,85 +277,56 @@ def index():
   </style>
 </head>
 <body>
-  <h1>Visitors Flea Market - multi booths, custom delimiters</h1>
-  <div class="flex-container">
-    <div class="half">
-      <h2>Lease Data</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Lease ID</th>
-            <th>Occupant</th>
-            <th>End</th>
-            <th>Location</th>
-            <th>Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-        (% for r in data_rows %)
-          <tr>
-            <td>(( r.lease_id ))</td>
-            <td>(( r.unit_number ))</td>
-            <td>(( r.lease_end_date ))</td>
-            <td>(( r.location ))</td>
-            <td>$(( "%.2f"|format(r.balance) ))</td>
-          </tr>
-        (% endfor %)
-        </tbody>
-      </table>
-    </div>
+  <h1>Visitors Flea Market - Map Only (Mobile-friendly, centered)</h1>
+  (% if booths|length > 0 %)
+    <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+    <script>
+    function initMap() {
+      let planeWidth = __PW__;
+      let planeHeight= __PH__;
+      const ctn = document.getElementById("mapContainer");
+      ctn.style.width  = planeWidth + "px";
+      ctn.style.height = planeHeight+"px";
 
-    <div class="half">
-      <h2>Map Layout</h2>
-      (% if booths|length > 0 %)
-        <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
-        <script>
-        function initMap() {
-          const planeWidth = __PW__;
-          const planeHeight= __PH__;
-          const ctn = document.getElementById("mapContainer");
-          ctn.style.width  = planeWidth + "px";
-          ctn.style.height = planeHeight+ "px";
+      const data= __BOOTH_JSON__;
+      data.forEach(b => {
+        const div = document.createElement("div");
+        div.className= "booth";
+        div.style.left= b.x+"px";
+        div.style.top = b.y+"px";
+        div.style.width= b.width+"px";
+        div.style.height=b.height+"px";
 
-          const data = __BOOTH_JSON__;
-          data.forEach(b => {
-            let d = document.createElement("div");
-            d.className="booth";
-            d.style.left= b.x+"px";
-            d.style.top = b.y+"px";
-            d.style.width= b.width+"px";
-            d.style.height=b.height+"px";
-            d.style.backgroundColor= b.color||"gray";
-            d.textContent= b.label;
+        div.style.backgroundColor= b.color||"gray";
+        div.textContent= b.label;
 
-            if(b.occupants && b.occupants.length>0) {
-              let info= b.occupants.map(o=>{
-                return (
-                  "LeaseID: "+o.lease_id+"\\n"+
-                  "Occupant: "+o.occupant_name+"\\n"+
-                  "End: "+o.lease_end+"\\n"+
-                  "Balance: $"+o.balance.toFixed(2)
-                );
-              }).join("\\n----\\n");
-              d.onclick= ()=>{
-                alert("Booth "+b.label+"\\n"+info);
-              }
-            } else {
-              d.onclick= ()=>{
-                alert("Booth "+b.label+"\\nVacant");
-              }
-            }
-
-            ctn.appendChild(d);
-          });
+        let occList= b.occupants||[];
+        if(occList.length>0) {
+          let info= occList.map(o=>{
+            return (
+              "LeaseID: " + o.lease_id + "\\n"+
+              "Occupant: " + o.occupant_name + "\\n"+
+              "End: " + o.lease_end + "\\n"+
+              "Balance: $"+ o.balance.toFixed(2)
+            );
+          }).join("\\n----\\n");
+          div.onclick= ()=>{
+            alert("Booth "+ b.label + "\\n" + info);
+          }
+        } else {
+          div.onclick= ()=>{
+            alert("Booth "+ b.label + "\\nVacant");
+          }
         }
-        window.onload= initMap;
-        </script>
-      (% else %)
-        <p>No map_layout.json or no booths found.</p>
-      (% endif %)
-    </div>
-  </div>
+
+        ctn.appendChild(div);
+      });
+    }
+    window.onload= initMap;
+    </script>
+  (% else %)
+    <p>No map_layout.json or no booths found.</p>
+  (% endif %)
 </body>
 </html>
     """
@@ -370,8 +334,7 @@ def index():
     from json import dumps
     booth_json_str= dumps(booths)
 
-    rendered= render_template_string(html_template, data_rows=data_rows, booths=booths)
-    # next, replace placeholders
+    rendered= render_template_string(html_template, booths=booths)
     rendered= rendered.replace("__PW__", str(planeW))
     rendered= rendered.replace("__PH__", str(planeH))
     rendered= rendered.replace("__BOOTH_JSON__", booth_json_str)

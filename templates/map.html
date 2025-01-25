@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VFM - Map Only</title>
+  <style>
+  body {
+    font-family: sans-serif;
+    margin: 20px;
+  }
+  #mapContainer {
+    display: block;
+    margin: 0 auto;       /* center horizontally */
+    border: 2px solid #333;
+    background: #fff;
+    max-width: 100%;
+    position: relative;
+  }
+  .booth {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 12px;
+    color: #000;
+    cursor: pointer;
+  }
+  </style>
+</head>
+<body>
+  <h1>Visitors Flea Market - Map Only</h1>
+  (% if booths|length > 0 %)
+    <!-- Use planeW and planeH to set size -->
+    <div id="mapContainer" style="width:(( planeW ))px; height:(( planeH ))px;"></div>
+    <script>
+    function initMap() {
+      let planeWidth = (( planeW ));
+      let planeHeight= (( planeH ));
+
+      const ctn = document.getElementById("mapContainer");
+      ctn.style.width  = planeWidth+"px";
+      ctn.style.height = planeHeight+"px";
+
+      const data = (( boothsJson ));
+      data.forEach(b => {
+        const div = document.createElement("div");
+        div.className="booth";
+        div.style.left = b.x+"px";
+        div.style.top  = b.y+"px";
+        div.style.width= b.width+"px";
+        div.style.height=b.height+"px";
+
+        div.style.backgroundColor = b.color || "gray";
+        div.textContent = b.label;
+
+        let occs = b.occupants || [];
+        if(occs.length>0) {
+          let info = occs.map(o=>{
+            return ("LeaseID: " + o.lease_id + "\\n"+
+                    "Occupant: " + o.occupant_name + "\\n"+
+                    "End: " + o.lease_end + "\\n"+
+                    "Balance: $"+ o.balance.toFixed(2));
+          }).join("\\n----\\n");
+
+          div.onclick= ()=>{
+            alert("Booth "+ b.label + "\\n"+ info);
+          }
+        } else {
+          div.onclick= ()=>{
+            alert("Booth "+ b.label + "\\nVacant");
+          }
+        }
+
+        ctn.appendChild(div);
+      });
+    }
+    window.onload= initMap;
+    </script>
+  (% else %)
+    <p>No map_layout.json or no booths found.</p>
+  (% endif %)
+</body>
+</html>
