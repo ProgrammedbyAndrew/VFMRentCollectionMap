@@ -5,10 +5,9 @@ import json
 from flask import Flask, render_template_string
 from occupant_service import get_leases_data
 
-############################################################################
-# 1) Custom Jinja delimiters
-############################################################################
 app = Flask(__name__)
+
+# Keep your custom Jinja delimiters
 app.jinja_options = {
     'block_start_string': '(%',
     'block_end_string': '%)',
@@ -18,18 +17,12 @@ app.jinja_options = {
     'comment_end_string': '#)'
 }
 
-
-############################################################################
-# 2) MAIN ROUTE: show the map only (no occupant list),
-#    occupant data in popups, mobile-friendly, centered, same logic as before
-############################################################################
 @app.route("/")
 def index():
-    # 1) fetch occupant data & filter
-    all_data= get_leases_data()
-    filtered= [r for r in all_data if r["property_name"]=="Visitors Flea Market"]
-
-    print("\n=== VISITORS FLEA MARKET occupant data (map only) ===")
+    # 1) occupant data, filter for "Visitors Flea Market"
+    all_data = get_leases_data()
+    filtered = [r for r in all_data if r["property_name"]=="Visitors Flea Market"]
+    print("\n=== VFM occupant data (map only) ===")
     for row in filtered:
         print(row)
 
@@ -38,7 +31,7 @@ def index():
         with open("map_layout.json","r") as f:
             map_data= json.load(f)
     except:
-        map_data=None
+        map_data= None
 
     planeW=600
     planeH=1000
@@ -48,7 +41,7 @@ def index():
         planeH= map_data.get("planeHeight",1000)
         booths= map_data.get("booths",[])
 
-    # occupant_map => { booth_label: [ occupantData, ... ] }
+    # occupant_map => { booth_label: [ occupantData,... ] }
     occupant_map={}
     for row in filtered:
         occupant= row["occupant_name"]
@@ -67,33 +60,60 @@ def index():
                     "balance": bal
                 })
 
-    # Merge occupant => booth
+    # 3) Color code the booths & assign occupant array
     for b in booths:
         label= b.get("label","").strip()
         occupant_list= occupant_map.get(label,[])
-        if occupant_list:
-            b["color"]="lightblue"
-            b["occupants"]= occupant_list
+        if not occupant_list:
+            # vacant => gray
+            b["color"] = "gray"
+            b["occupants"] = []
         else:
-            b["color"]="gray"
-            b["occupants"]=[]
+            b["occupants"] = occupant_list
+            total_bal = sum(o["balance"] for o in occupant_list)
 
-    # 3) same final HTML template from your single-file code, with placeholders
+            # check occupant name for "company storage"
+            has_company_storage = any("company storage" in o["occupant_name"].lower()
+                                      for o in occupant_list)
+            if has_company_storage:
+                b["color"] = "blue"
+            else:
+                if total_bal > 0:
+                    b["color"] = "red"
+                else:
+                    b["color"] = "green"
+
+    # 4) Final HTML w/ legend + placeholders
     html_template= """
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VFM - Map Only</title>
+  <title>VFM - Map Only w/ .env API keys</title>
   <style>
   body {
     font-family: sans-serif;
     margin: 20px;
   }
+  .legend {
+    margin-bottom: 1rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .color-box {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #333;
+    margin-right: 8px;
+  }
+
   #mapContainer {
     display: block;
-    margin: 0 auto;              /* center horizontally */
+    margin: 0 auto;
     border: 2px solid #333;
     background: #fff;
     max-width: 100%;
@@ -114,7 +134,28 @@ def index():
   </style>
 </head>
 <body>
-  <h1>Visitors Flea Market - Map Only (Mobile-friendly, centered)</h1>
+  <h1>Visitors Flea Market - Map Only (.env for API keys)</h1>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="color-box" style="background:green;"></div>
+      <span>No Amount Due</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:red;"></div>
+      <span>Past Due</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:blue;"></div>
+      <span>Company Storage</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:gray;"></div>
+      <span>Vacant</span>
+    </div>
+  </div>
+
   (% if booths|length > 0 %)
     <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
     <script>
@@ -123,14 +164,14 @@ def index():
       let planeHeight= __PH__;
       const ctn = document.getElementById("mapContainer");
       ctn.style.width  = planeWidth + "px";
-      ctn.style.height = planeHeight+"px";
+      ctn.style.height = planeHeight + "px";
 
       const data= __BOOTH_JSON__;
       data.forEach(b => {
         const div= document.createElement("div");
         div.className= "booth";
-        div.style.left= b.x+"px";
-        div.style.top = b.y+"px";
+        div.style.left = b.x+"px";
+        div.style.top  = b.y+"px";
         div.style.width= b.width+"px";
         div.style.height=b.height+"px";
 
@@ -148,7 +189,7 @@ def index():
             );
           }).join("\\n----\\n");
           div.onclick= ()=>{
-            alert("Booth "+ b.label + "\\n" + info);
+            alert("Booth "+ b.label + "\\n"+ info);
           }
         } else {
           div.onclick= ()=>{
@@ -171,13 +212,14 @@ def index():
     from json import dumps
     booth_json_str= dumps(booths)
 
-    # 4) use Jinja + string replacement same as your single-file approach
+    # same text replacements
     rendered= render_template_string(html_template, booths=booths)
     rendered= rendered.replace("__PW__", str(planeW))
     rendered= rendered.replace("__PH__", str(planeH))
     rendered= rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
+
 
 if __name__=="__main__":
     app.run(debug=True, port=5001)

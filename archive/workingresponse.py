@@ -21,8 +21,8 @@ app.jinja_options = {
 ############################################################################
 # 2) Buildium fetch logic
 ############################################################################
-BUILDIUM_CLIENT_ID = "77131864-17a2-4460-a12b-0bcbe22051bf"
-BUILDIUM_CLIENT_SECRET = "pt0yNFdfIjPDyT9ftL2F3gh2fAmFlDVtsElPJhe5QuI="
+BUILDIUM_CLIENT_ID = ""
+BUILDIUM_CLIENT_SECRET = ""
 
 LEASES_URL = "https://api.buildium.com/v1/leases"
 OUTSTANDING_BALANCES_URL = "https://api.buildium.com/v1/leases/outstandingbalances"

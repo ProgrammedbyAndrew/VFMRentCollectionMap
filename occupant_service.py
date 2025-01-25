@@ -1,6 +1,6 @@
 """
-Merges occupant data from Buildium with address "AddressLine1" => location.
-Returns a list of dicts like:
+Merges occupant data from Buildium with AddressLine1 => location
+Returns a list of dicts:
 [
   {
     "lease_id": <int>,
@@ -20,6 +20,7 @@ from buildium_api import (
     fetch_all_properties,
     fetch_all_units
 )
+
 
 def get_units_map():
     units = fetch_all_units()
@@ -48,13 +49,14 @@ def get_leases_data():
         end_date= lease.get("LeaseToDate","N/A")
         prop_id= lease.get("PropertyId")
         prop_name= prop_map.get(prop_id,"Unknown Property")
-        bal= bal_map.get(lease_id,0.0)
+        bal= bal_map.get(lease_id, 0.0)
 
         potential_unit_id= lease.get("RentalUnitId")
-        unit_info=None
+        unit_info= None
         if potential_unit_id and potential_unit_id in units_map:
             unit_info= units_map[potential_unit_id]
         else:
+            # fallback match occupant
             for u in units_map.values():
                 if u.get("UnitNumber")== occupant:
                     unit_info= u
@@ -72,7 +74,7 @@ def get_leases_data():
             "lease_id": lease_id,
             "occupant_name": occupant,
             "lease_end_date": end_date,
-            "location": loc,  # e.g. "41 42"
+            "location": loc,
             "balance": bal,
             "property_name": prop_name
         })
