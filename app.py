@@ -19,61 +19,42 @@ app.jinja_options = {
 
 def parse_token(token):
     """
-    Given a location token like "S25", "P14", "K1", or "OF2",
-    return (prefix, booth_label) such that:
-      - "S25" => ( "S",  "25" )
-      - "P14" => ( "P",  "14" )
-      - "K1"  => ( "K",  "K1" )   # keep the entire token as booth label
-      - "OF2" => ( "OF", "OF2" )  # keep entire token
-      - "39"  => ( "",   "39" )   # no prefix, numeric booth label
+    If token starts with 'S' or 'P', we strip that letter for booth label (e.g. 'S24' -> label '24').
+    If token starts with 'K' or 'OF', we keep the entire token as the booth label (e.g. 'K1' -> 'K1').
+    Otherwise, no prefix => use the raw token as booth label.
     """
     up = token.upper().strip()
     if up.startswith("S"):
-        # "S25" => prefix "S", booth "25"
-        return ("S", up[1:])
+        return ("S", up[1:])      
     if up.startswith("P"):
-        # "P12" => prefix "P", booth "12"
-        return ("P", up[1:])
+        return ("P", up[1:])      
     if up.startswith("K"):
-        # "K5" => prefix "K", booth "K5"
-        return ("K", up)
+        return ("K", up)          
     if up.startswith("OF"):
-        # "OF2" => prefix "OF", booth "OF2"
-        return ("OF", up)
-    # else no recognized prefix => entire token is the booth label
+        return ("OF", up)         
     return ("", up)
-
 
 def occupantColor(occupant_list):
     """
-    1) If total rent due >0 => red
-    2) Else check occupant prefixes:
-        - if prefix "S" => purple
-        - if prefix "P" => blue
-        - if prefix "K" => orange
-        - if prefix "OF" => pink
-       If multiple occupants have different prefixes, we pick in order S->P->K->OF
-    3) If no prefix => green
+    1) If any occupant behind on rent => RED
+    2) Else check prefixes (S->purple, P->blue, K->orange, OF->pink)
+    3) Else => green
     """
-
-    # 1) If occupant behind on rent => red
     total_bal = sum(o["balance"] for o in occupant_list)
+    # 1) rent due => red
     if total_bal > 0:
         return "red"
 
-    # 2) gather all prefixes from occupant data
+    # 2) gather prefix from occupant tokens
     prefix_set = set()
     for occ in occupant_list:
         loc_str = occ.get("location","").strip()
-        if loc_str:
-            tokens = loc_str.split()
-            for t in tokens:
-                pfx, _ = parse_token(t)
-                if pfx:
-                    prefix_set.add(pfx)
+        tokens = loc_str.split()
+        for t in tokens:
+            pfx, _ = parse_token(t)
+            if pfx:
+                prefix_set.add(pfx)
 
-    # In case multiple occupants => pick color by priority
-    # e.g. if there's any occupant with prefix "S", we do purple first, else "P" => blue, else "K" => orange, etc.
     if "S"  in prefix_set:
         return "purple"
     if "P"  in prefix_set:
@@ -111,14 +92,14 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label: [ occupantDict, occupantDict, ... ] }
+    # occupant_map => { booth_label: [ occupantData,... ] }
     occupant_map = {}
     for row in filtered:
-        occupant    = row["occupant_name"]
-        loc_str     = row["location"].strip()
-        bal         = row["balance"]
-        lease_id    = row["lease_id"]
-        end_date    = row["lease_end_date"]
+        occupant = row["occupant_name"]
+        loc_str  = row["location"].strip()
+        bal      = row["balance"]
+        lease_id = row["lease_id"]
+        end_date = row["lease_end_date"]
 
         if loc_str and loc_str != "N/A":
             tokens = loc_str.split()
@@ -137,15 +118,13 @@ def index():
         label = b.get("label","").strip()
         occupant_list = occupant_map.get(label, [])
         if not occupant_list:
-            # vacant => gray
             b["color"] = "gray"
             b["occupants"] = []
         else:
             b["occupants"] = occupant_list
-            booth_color = occupantColor(occupant_list)
-            b["color"] = booth_color
+            b["color"] = occupantColor(occupant_list)
 
-    # 4) Final HTML (pinned legend)
+    # 4) Final HTML
     html_template= """
 <!DOCTYPE html>
 <html>
@@ -153,94 +132,113 @@ def index():
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>VFM - Mixed S/P (Numeric) & K/OF (Lettered)</title>
+  <title>Visitors Flea Market Rent Collection Map</title>
   <style>
-  body {
-    font-family: sans-serif;
-    margin: 20px;
-  }
+    body {
+      font-family: sans-serif;
+      margin: 0; /* We'll handle spacing differently below */
+      padding: 0;
+    }
+    h1 {
+      text-align: center;
+      margin: 20px 0 10px; /* top and bottom spacing for the title */
+    }
 
-  .legend {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    width: 200px;
-    background: #fff;
-    border: 2px solid #333;
-    border-radius: 8px;
-    padding: 10px;
-    z-index: 999;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-  .color-box {
-    width: 20px;
-    height: 20px;
-    border: 2px solid #333;
-    margin-right: 8px;
-  }
+    /* .pageContent includes the map container, 
+       with extra bottom padding so it won't be hidden behind the fixed legend */
+    .pageContent {
+      padding-bottom: 90px; /* space for the bottom legend bar */
+      margin: 0 20px;       /* some side margin if you want */
+    }
 
-  #mapContainer {
-    display: block;
-    margin: 0 auto;
-    border: 2px solid #333;
-    background: #fff;
-    max-width: 100%;
-    position: relative;
-  }
-  .booth {
-    position: absolute;
-    box-sizing: border-box;
-    border: 2px solid #111;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-weight: bold;
-    font-size: 12px;
-    color: #000;
-    cursor: pointer;
-  }
+    /* The pinned legend at the bottom as a bar */
+    .legend {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #fff;
+      border-top: 2px solid #333;
+      padding: 8px;
+      z-index: 999;
+      display: flex;
+      justify-content: center; /* center items horizontally */
+      flex-wrap: wrap;         /* wrap items if needed on small phones */
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 4px 8px;
+    }
+    .color-box {
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+      border: 2px solid #333;
+    }
+
+    /* The map container - no border, just the plane area */
+    #mapContainer {
+      display: block;
+      margin: 0 auto;
+      background: #fff;
+      max-width: 100%;
+      position: relative;
+    }
+    .booth {
+      position: absolute;
+      box-sizing: border-box;
+      border: 2px solid #111; /* put back booth borders */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      font-size: 12px;
+      color: #000;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <div class="legend">
-    <div class="legend-item">
-      <div class="color-box" style="background:red;"></div>
-      <span>Behind on Rent</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:gray;"></div>
-      <span>Vacant</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:purple;"></div>
-      <span>S + number => e.g. "S24"</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:blue;"></div>
-      <span>P + number => e.g. "P14"</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:orange;"></div>
-      <span>K + number => e.g. "K1"</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:pink;"></div>
-      <span>OF + number => e.g. "OF2"</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:green;"></div>
-      <span>No prefix + No rent => Green</span>
-    </div>
-  </div>
-
   (% if booths|length > 0 %)
-    <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+    <div class="pageContent">
+      <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+    </div>
+
+    <div class="legend">
+      <!-- The legend items as a bottom bar -->
+      <div class="legend-item">
+        <div class="color-box" style="background:red;"></div>
+        <span>Behind on Rent</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:gray;"></div>
+        <span>Vacant</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:purple;"></div>
+        <span>S + number</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:blue;"></div>
+        <span>P + number</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:orange;"></div>
+        <span>K1, K2, etc.</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:pink;"></div>
+        <span>OF1, OF2, etc.</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:green;"></div>
+        <span>No prefix + No rent due</span>
+      </div>
+    </div>
+
     <script>
     function initMap() {
       let planeWidth  = __PW__;
@@ -284,8 +282,8 @@ def index():
         ctn.appendChild(div);
       });
 
-      // phone/screen narrower => scale
-      let containerParent = ctn.parentNode;
+      // phone narrower => scale
+      let containerParent = ctn.parentNode; // .pageContent
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
         let scale = actualWidth / planeWidth;
@@ -296,7 +294,7 @@ def index():
     window.onload = initMap;
     </script>
   (% else %)
-    <p>No map_layout.json or no booths found.</p>
+    <p style="margin:20px;">No map_layout.json or no booths found.</p>
   (% endif %)
 </body>
 </html>
@@ -313,6 +311,5 @@ def index():
 
     return rendered
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     app.run(debug=True, port=5001)
