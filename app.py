@@ -19,55 +19,71 @@ app.jinja_options = {
 
 def parse_token(token):
     """
-    If token starts with 'S' or 'P', we strip that letter for the numeric booth label (e.g. 'S24' -> booth '24').
-    If token starts with 'K' or 'OF', we keep the entire token as the booth label (e.g. 'K1' -> 'K1').
-    Otherwise, no prefix => entire token is the booth label.
+    If token starts with 'S' or 'P', strip that letter => numeric booth label.
+    e.g. 'S24' => prefix 'S', booth '24'
+         'P10' => prefix 'P', booth '10'
+    If token starts with 'K' or 'OF', keep entire token => lettered booth
+         'K1' => prefix 'K', booth 'K1'
+         'OF2' => prefix 'OF', booth 'OF2'
+    Otherwise => no prefix => raw token as booth label.
     """
     up = token.upper().strip()
     if up.startswith("S"):
-        return ("S", up[1:])      
+        return ("S", up[1:])
     if up.startswith("P"):
-        return ("P", up[1:])      
+        return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)          
+        return ("K", up)
     if up.startswith("OF"):
-        return ("OF", up)         
+        return ("OF", up)
     return ("", up)
 
 def occupantColor(occupant_list):
     """
-    1) If any occupant behind on rent => RED (Past Due)
-    2) Else check prefixes:
-       S => purple, P => blue, K => orange, OF => pink
-    3) Else => green (On Time $0)
+    Slightly darker pastel color logic:
+
+      1) If total_bal > 0 => Past Due => #ff8a8a
+      2) If occupant_name has 'company storage' => #bca4ff
+      3) Else prefix-based:
+         S => #a7aae6
+         P => #84c7ff
+         K => #f9b8cd
+         OF => #ffca7a
+      4) Else => #8ae89f (On Time)
     """
     total_bal = sum(o["balance"] for o in occupant_list)
-    # 1) rent due => red
     if total_bal > 0:
-        return "red"
+        # Past due
+        return "#ff8a8a"
 
-    # 2) gather prefix from occupant tokens
+    # Check occupant name for "company storage"
+    has_company_storage = any("company storage" in o["occupant_name"].lower()
+                              for o in occupant_list)
+    if has_company_storage:
+        # Slightly darker pastel purple
+        return "#bca4ff"
+
+    # Else check prefix
     prefix_set = set()
     for occ in occupant_list:
         loc_str = occ.get("location","").strip()
-        tokens = loc_str.split()
-        for t in tokens:
+        for t in loc_str.split():
             pfx, _ = parse_token(t)
             if pfx:
                 prefix_set.add(pfx)
 
-    if "S"  in prefix_set:
-        return "purple"   # Storage
-    if "P"  in prefix_set:
-        return "blue"     # Pantry
-    if "K"  in prefix_set:
-        return "orange"   # Kitchen
+    # Priority S->P->K->OF
+    if "S" in prefix_set:
+        return "#a7aae6"  # Storage
+    if "P" in prefix_set:
+        return "#84c7ff"  # Pantry
+    if "K" in prefix_set:
+        return "#f9b8cd"  # Kitchen
     if "OF" in prefix_set:
-        return "pink"     # Office
+        return "#ffca7a"  # Office
 
-    # 3) no prefix => green
-    return "green"
-
+    # Otherwise => On Time => #8ae89f
+    return "#8ae89f"
 
 @app.route("/")
 def index():
@@ -80,7 +96,7 @@ def index():
 
     # 2) load map_layout.json
     try:
-        with open("map_layout.json","r") as f:
+        with open("map_layout.json", "r") as f:
             map_data = json.load(f)
     except:
         map_data = None
@@ -93,37 +109,38 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label: [ occupantData,... ] }
+    # occupant_map => { booth_label.upper(): [ occupantData, ... ] }
     occupant_map = {}
     for row in filtered:
-        occupant = row["occupant_name"]
-        loc_str  = row["location"].strip()
-        bal      = row["balance"]
-        lease_id = row["lease_id"]
-        end_date = row["lease_end_date"]
+        occupant_name = row["occupant_name"]
+        loc_str       = row["location"].strip()
+        bal           = row["balance"]
+        lease_id      = row["lease_id"]
+        end_date      = row["lease_end_date"]
 
         if loc_str and loc_str != "N/A":
-            tokens = loc_str.split()
-            for t in tokens:
+            for t in loc_str.split():
                 pfx, booth_lbl = parse_token(t)
-                occupant_map.setdefault(booth_lbl, []).append({
-                    "occupant_name": occupant,
+                occupant_map.setdefault(booth_lbl.upper(), []).append({
+                    "occupant_name": occupant_name,
                     "lease_id": lease_id,
                     "lease_end": end_date,
                     "balance": bal,
                     "location": loc_str
                 })
 
-    # 3) color-code the booths
+    # 3) color-code each booth
     for b in booths:
-        label = b.get("label","").strip()
-        occupant_list = occupant_map.get(label, [])
-        if not occupant_list:
-            b["color"] = "gray"
-            b["occupants"] = []
-        else:
+        original_label = b.get("label","").strip()
+        label_up       = original_label.upper()
+        occupant_list  = occupant_map.get(label_up, [])
+        if occupant_list:
             b["occupants"] = occupant_list
-            b["color"] = occupantColor(occupant_list)
+            b["color"]     = occupantColor(occupant_list)
+        else:
+            b["occupants"] = []
+            # Slightly darker pastel gray for vacant
+            b["color"]     = "#bdbdbd"
 
     # 4) Final HTML
     html_template= """
@@ -132,7 +149,6 @@ def index():
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>Visitors Flea Market Rent Collection Map</title>
   <style>
     body {
@@ -146,8 +162,8 @@ def index():
     }
 
     .pageContent {
-      padding-bottom: 90px; /* space for the fixed legend bar at bottom */
-      margin: 0 20px;       
+      padding-bottom: 90px; /* so the bottom legend won't cover the map */
+      margin: 0 20px;
     }
 
     .legend {
@@ -160,7 +176,7 @@ def index():
       padding: 8px;
       z-index: 999;
       display: flex;
-      justify-content: center;
+      justify-content: space-evenly;
       flex-wrap: wrap;
     }
     .legend-item {
@@ -178,9 +194,9 @@ def index():
     #mapContainer {
       display: block;
       margin: 0 auto;
-      background: #fff;
       max-width: 100%;
       position: relative;
+      background: #fff;
     }
     .booth {
       position: absolute;
@@ -205,30 +221,34 @@ def index():
     </div>
 
     <div class="legend">
-      <!-- Updated legend labels -->
+      <!-- Slightly darker pastel colors in legend -->
       <div class="legend-item">
-        <div class="color-box" style="background:blue;"></div>
+        <div class="color-box" style="background:#84c7ff;"></div>
         <span>Pantry</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:pink;"></div>
+        <div class="color-box" style="background:#ffca7a;"></div>
         <span>Office</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:orange;"></div>
+        <div class="color-box" style="background:#f9b8cd;"></div>
         <span>Kitchen</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:gray;"></div>
+        <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:red;"></div>
+        <div class="color-box" style="background:#ff8a8a;"></div>
         <span>Past Due</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:green;"></div>
-        <span>On Time $0 balance</span>
+        <div class="color-box" style="background:#8ae89f;"></div>
+        <span>On Time $0</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:#bca4ff;"></div>
+        <span>Company Storage</span>
       </div>
     </div>
 
@@ -250,8 +270,10 @@ def index():
         div.style.width  = b.width + "px";
         div.style.height = b.height + "px";
 
-        div.style.backgroundColor = b.color || "gray";
         div.textContent = b.label;
+
+        // Slightly darker pastel color
+        div.style.backgroundColor = b.color || "#bdbdbd"; 
 
         let occList = b.occupants || [];
         if (occList.length > 0) {
@@ -275,8 +297,8 @@ def index():
         ctn.appendChild(div);
       });
 
-      // Scale for narrower phones
-      let containerParent = ctn.parentNode; // .pageContent
+      // phone narrower => scale
+      let containerParent = ctn.parentNode;
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
         let scale = actualWidth / planeWidth;
@@ -296,14 +318,13 @@ def index():
     from json import dumps
     booth_json_str = dumps(booths)
 
-    # same text replacements
+    # Insert plane size & booth data
     rendered = render_template_string(html_template, booths=booths)
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
     rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
-
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
