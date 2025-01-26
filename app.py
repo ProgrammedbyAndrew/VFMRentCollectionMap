@@ -19,9 +19,9 @@ app.jinja_options = {
 
 def parse_token(token):
     """
-    If token starts with 'S' or 'P', we strip that letter for booth label (e.g. 'S24' -> label '24').
+    If token starts with 'S' or 'P', we strip that letter for the numeric booth label (e.g. 'S24' -> booth '24').
     If token starts with 'K' or 'OF', we keep the entire token as the booth label (e.g. 'K1' -> 'K1').
-    Otherwise, no prefix => use the raw token as booth label.
+    Otherwise, no prefix => entire token is the booth label.
     """
     up = token.upper().strip()
     if up.startswith("S"):
@@ -36,9 +36,10 @@ def parse_token(token):
 
 def occupantColor(occupant_list):
     """
-    1) If any occupant behind on rent => RED
-    2) Else check prefixes (S->purple, P->blue, K->orange, OF->pink)
-    3) Else => green
+    1) If any occupant behind on rent => RED (Past Due)
+    2) Else check prefixes:
+       S => purple, P => blue, K => orange, OF => pink
+    3) Else => green (On Time $0)
     """
     total_bal = sum(o["balance"] for o in occupant_list)
     # 1) rent due => red
@@ -56,13 +57,13 @@ def occupantColor(occupant_list):
                 prefix_set.add(pfx)
 
     if "S"  in prefix_set:
-        return "purple"
+        return "purple"   # Storage
     if "P"  in prefix_set:
-        return "blue"
+        return "blue"     # Pantry
     if "K"  in prefix_set:
-        return "orange"
+        return "orange"   # Kitchen
     if "OF" in prefix_set:
-        return "pink"
+        return "pink"     # Office
 
     # 3) no prefix => green
     return "green"
@@ -136,22 +137,19 @@ def index():
   <style>
     body {
       font-family: sans-serif;
-      margin: 0; /* We'll handle spacing differently below */
+      margin: 0;
       padding: 0;
     }
     h1 {
       text-align: center;
-      margin: 20px 0 10px; /* top and bottom spacing for the title */
+      margin: 20px 0 10px;
     }
 
-    /* .pageContent includes the map container, 
-       with extra bottom padding so it won't be hidden behind the fixed legend */
     .pageContent {
-      padding-bottom: 90px; /* space for the bottom legend bar */
-      margin: 0 20px;       /* some side margin if you want */
+      padding-bottom: 90px; /* space for the fixed legend bar at bottom */
+      margin: 0 20px;       
     }
 
-    /* The pinned legend at the bottom as a bar */
     .legend {
       position: fixed;
       bottom: 0;
@@ -162,8 +160,8 @@ def index():
       padding: 8px;
       z-index: 999;
       display: flex;
-      justify-content: center; /* center items horizontally */
-      flex-wrap: wrap;         /* wrap items if needed on small phones */
+      justify-content: center;
+      flex-wrap: wrap;
     }
     .legend-item {
       display: flex;
@@ -177,7 +175,6 @@ def index():
       border: 2px solid #333;
     }
 
-    /* The map container - no border, just the plane area */
     #mapContainer {
       display: block;
       margin: 0 auto;
@@ -188,7 +185,7 @@ def index():
     .booth {
       position: absolute;
       box-sizing: border-box;
-      border: 2px solid #111; /* put back booth borders */
+      border: 2px solid #111; 
       display: flex;
       justify-content: center;
       align-items: center;
@@ -208,34 +205,30 @@ def index():
     </div>
 
     <div class="legend">
-      <!-- The legend items as a bottom bar -->
+      <!-- Updated legend labels -->
       <div class="legend-item">
-        <div class="color-box" style="background:red;"></div>
-        <span>Behind on Rent</span>
+        <div class="color-box" style="background:blue;"></div>
+        <span>Pantry</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:pink;"></div>
+        <span>Office</span>
+      </div>
+      <div class="legend-item">
+        <div class="color-box" style="background:orange;"></div>
+        <span>Kitchen</span>
       </div>
       <div class="legend-item">
         <div class="color-box" style="background:gray;"></div>
         <span>Vacant</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:purple;"></div>
-        <span>S + number</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background:blue;"></div>
-        <span>P + number</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background:orange;"></div>
-        <span>K1, K2, etc.</span>
-      </div>
-      <div class="legend-item">
-        <div class="color-box" style="background:pink;"></div>
-        <span>OF1, OF2, etc.</span>
+        <div class="color-box" style="background:red;"></div>
+        <span>Past Due</span>
       </div>
       <div class="legend-item">
         <div class="color-box" style="background:green;"></div>
-        <span>No prefix + No rent due</span>
+        <span>On Time $0 balance</span>
       </div>
     </div>
 
@@ -282,7 +275,7 @@ def index():
         ctn.appendChild(div);
       });
 
-      // phone narrower => scale
+      // Scale for narrower phones
       let containerParent = ctn.parentNode; // .pageContent
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
@@ -310,6 +303,7 @@ def index():
     rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
