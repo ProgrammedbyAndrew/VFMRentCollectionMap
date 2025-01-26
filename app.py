@@ -17,6 +17,90 @@ app.jinja_options = {
     'comment_end_string': '#)'
 }
 
+def parse_prefixes_in_location(loc_str):
+    """
+    Given the occupant's location string (e.g. 'S25 SX100 P32'),
+    return a set of detected prefixes: {'S','SX','P'} etc.
+    """
+    if not loc_str or loc_str.strip().upper() == "N/A":
+        return set()
+
+    results = set()
+    tokens = loc_str.strip().split()
+    for t in tokens:
+        up = t.upper()
+        if up.startswith("SX"):
+            results.add("SX")
+        elif up.startswith("PX"):
+            results.add("PX")
+        elif up.startswith("KX"):
+            results.add("KX")
+        elif up.startswith("OFX"):
+            results.add("OFX")
+        elif up.startswith("S"):
+            results.add("S")
+        elif up.startswith("P"):
+            results.add("P")
+        elif up.startswith("K"):
+            results.add("K")
+        elif up.startswith("OF"):
+            results.add("OF")
+        # else no prefix recognized => ignore
+    return results
+
+def occupantColor(occupant_list):
+    """
+    Decide booth color by checking occupant prefixes (SX/PX/KX/OFX or S/P/K/OF).
+    If none found, revert to old logic:
+      - If occupant name has 'company storage' => blue
+      - Else if total balance > 0 => red
+      - Else => green
+    """
+
+    # Gather all prefixes & total balance
+    all_prefixes = set()
+    total_bal = 0.0
+    has_company_storage = False
+
+    for occ in occupant_list:
+        loc = occ.get("location","")
+        pfx_set = parse_prefixes_in_location(loc)
+        all_prefixes |= pfx_set  # union
+        total_bal += occ.get("balance", 0.0)
+
+        # Check occupant name for "company storage"
+        if "company storage" in occ["occupant_name"].lower():
+            has_company_storage = True
+
+    # 1) Extended prefixes first
+    if "SX" in all_prefixes:
+        return "brown"    # e.g. SX => Storage Extended
+    if "PX" in all_prefixes:
+        return "cyan"     # PX => Pantry Extended
+    if "KX" in all_prefixes:
+        return "lime"     # KX => Kitchen Extended
+    if "OFX" in all_prefixes:
+        return "gold"     # OFX => Office Extended
+
+    # 2) Then simpler ones
+    if "S" in all_prefixes:
+        return "purple"   # S => Storage
+    if "P" in all_prefixes:
+        return "blue"     # P => Pantry
+    if "K" in all_prefixes:
+        return "orange"   # K => Kitchen
+    if "OF" in all_prefixes:
+        return "pink"     # OF => Office
+
+    # 3) No prefixes => fallback to your original logic
+    if has_company_storage:
+        return "blue"
+    elif total_bal > 0:
+        return "red"
+    else:
+        return "green"
+
+
 @app.route("/")
 def index():
     # 1) occupant data, filter for "Visitors Flea Market"
@@ -53,11 +137,13 @@ def index():
         if loc_str != "N/A" and loc_str != "":
             booth_list = loc_str.split()
             for b_label in booth_list:
+                # Store occupant data, including the full loc_str for prefix parsing
                 occupant_map.setdefault(b_label, []).append({
                     "occupant_name": occupant,
                     "lease_id": lease_id,
                     "lease_end": end_date,
-                    "balance": bal
+                    "balance": bal,
+                    "location": loc_str  # <--- store entire location string
                 })
 
     # 3) Color code the booths & assign occupant array
@@ -70,18 +156,9 @@ def index():
             b["occupants"] = []
         else:
             b["occupants"] = occupant_list
-            total_bal = sum(o["balance"] for o in occupant_list)
-
-            # check occupant name for "company storage"
-            has_company_storage = any("company storage" in o["occupant_name"].lower()
-                                      for o in occupant_list)
-            if has_company_storage:
-                b["color"] = "blue"
-            else:
-                if total_bal > 0:
-                    b["color"] = "red"
-                else:
-                    b["color"] = "green"
+            # Now pick the color using new prefix logic
+            booth_color = occupantColor(occupant_list)
+            b["color"] = booth_color
 
     # 4) Final HTML w/ just a short scaling step in JS
     html_template= """
@@ -151,7 +228,7 @@ def index():
     </div>
     <div class="legend-item">
       <div class="color-box" style="background:blue;"></div>
-      <span>Company Storage</span>
+      <span>Company Storage or P-Pantry</span>
     </div>
     <div class="legend-item">
       <div class="color-box" style="background:gray;"></div>

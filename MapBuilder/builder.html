@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Map Builder - Full Features (Custom Size, Multi-Select Drag, etc.)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background: #f9f9f9;
+    }
+    #toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: #eee;
+      border-bottom: 2px solid #ccc;
+    }
+    label {
+      font-weight: bold;
+      margin-right: 0.25rem;
+    }
+    select, input[type=number], input[type=text] {
+      padding: 4px 6px;
+      margin-right: 0.5rem;
+      font-size: 14px;
+    }
+    button {
+      padding: 6px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    #map {
+      position: relative;
+      margin: 0 auto;
+      background: #fff;
+      border: 2px solid #ccc;
+      cursor: crosshair; /* for placing new booths */
+    }
+
+    .booth {
+      position: absolute;
+      background-color: rgba(0,0,255,0.2);
+      border: 2px solid #333;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+      color: #000;
+      user-select: none;
+      cursor: move;
+    }
+    .booth:hover {
+      border-color: red;
+    }
+    .booth.selected {
+      border-color: #4CAF50 !important;
+      background-color: rgba(0,255,0,0.1);
+    }
+  </style>
+</head>
+<body>
+
+<div id="toolbar">
+  <!-- Plane size controls -->
+  <div>
+    <label>Plane W(px):</label>
+    <input type="number" id="planeWidth" value="600" style="width:70px;">
+    <label>Plane H(px):</label>
+    <input type="number" id="planeHeight" value="1000" style="width:70px;">
+    <button id="applyPlaneBtn">Apply Plane Size</button>
+  </div>
+
+  <!-- Booth size selection -->
+  <div>
+    <label>Size(ft):</label>
+    <select id="sizeSelect">
+      <option value="10x10">10×10</option>
+      <option value="10x20">10×20</option>
+      <option value="6.66x10">6.66×10</option>
+      <option value="custom">Custom</option>
+    </select>
+    <span id="customSizeFields" style="display:none">
+      <label>W(ft):</label>
+      <input type="number" id="customWidthFt" value="8" style="width:50px;">
+      <label>H(ft):</label>
+      <input type="number" id="customHeightFt" value="12" style="width:50px;">
+    </span>
+  </div>
+
+  <!-- Optional booth label -->
+  <div>
+    <label>Label:</label>
+    <input type="text" id="labelInput" placeholder="e.g. Booth 101" style="width:80px;">
+  </div>
+
+  <button id="undoBtn">Undo Last</button>
+  <button id="selectAllBtn">Select All</button>
+  <button id="loadBtn">Load JSON</button>
+  <button id="exportBtn">Export JSON</button>
+</div>
+
+<!-- Hidden file input for load -->
+<input type="file" id="fileInput" accept=".json" style="display:none" />
+
+<div id="map"></div>
+
+<script>
+/////////////////////////////////////////////////////////////////////////////////////
+// CONFIG
+/////////////////////////////////////////////////////////////////////////////////////
+const FT_TO_PX = 4; 
+const SNAP_THRESHOLD = 10;
+const DRAG_THRESHOLD = 5;
+let nextBoothNumber=1; 
+
+// All booths: { label, x, y, width, height, element, selected:boolean }
+const booths=[];
+
+// DOM references
+const mapEl           = document.getElementById("map");
+const planeWidthEl    = document.getElementById("planeWidth");
+const planeHeightEl   = document.getElementById("planeHeight");
+const applyPlaneBtn   = document.getElementById("applyPlaneBtn");
+
+const sizeSelect      = document.getElementById("sizeSelect");
+const customSizeFields= document.getElementById("customSizeFields");
+const customWidthFtEl = document.getElementById("customWidthFt");
+const customHeightFtEl= document.getElementById("customHeightFt");
+
+const labelInput      = document.getElementById("labelInput");
+
+const undoBtn         = document.getElementById("undoBtn");
+const selectAllBtn    = document.getElementById("selectAllBtn");
+const loadBtn         = document.getElementById("loadBtn");
+const exportBtn       = document.getElementById("exportBtn");
+const fileInput       = document.getElementById("fileInput");
+
+/////////////////////////////////////////////////////////////////////////////////////
+// SHOW/HIDE CUSTOM SIZE FIELDS
+/////////////////////////////////////////////////////////////////////////////////////
+sizeSelect.addEventListener("change", ()=>{
+  if(sizeSelect.value==="custom"){
+    customSizeFields.style.display="inline-block";
+  } else {
+    customSizeFields.style.display="none";
+  }
+});
+
+/////////////////////////////////////////////////////////////////////////////////////
+// APPLY PLANE SIZE
+/////////////////////////////////////////////////////////////////////////////////////
+applyPlaneBtn.addEventListener("click", ()=>{
+  const w=parseInt(planeWidthEl.value,10)||600;
+  const h=parseInt(planeHeightEl.value,10)||1000;
+  mapEl.style.width= w+"px";
+  mapEl.style.height=h+"px";
+
+  // clamp existing
+  booths.forEach(b=>{
+    if(b.x+b.width> w){
+      b.x=Math.max(0,w-b.width);
+      b.element.style.left=b.x+"px";
+    }
+    if(b.y+b.height> h){
+      b.y=Math.max(0,h-b.height);
+      b.element.style.top=b.y+"px";
+    }
+  });
+});
+
+/////////////////////////////////////////////////////////////////////////////////////
+// SELECT ALL
+/////////////////////////////////////////////////////////////////////////////////////
+selectAllBtn.addEventListener("click", ()=>{
+  const anyUnselected = booths.some(b=> !b.selected);
+  if(anyUnselected){
+    booths.forEach(b=> setSelected(b,true));
+  } else {
+    booths.forEach(b=> setSelected(b,false));
+  }
+});
+function setSelected(booth, sel){
+  booth.selected= sel;
+  if(sel) booth.element.classList.add("selected");
+  else    booth.element.classList.remove("selected");
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+// MOUSE: placing & multi-drag
+/////////////////////////////////////////////////////////////////////////////////////
+let isMouseDown=false;
+let mouseDownX=0, mouseDownY=0;
+let didMove=false;
+
+let isDraggingSelection=false;
+let dragOffsets=[]; // for each booth in selection
+let selectionBounding=null; // bounding box of entire selection
+
+mapEl.addEventListener("mousedown", e=>{
+  const rect= mapEl.getBoundingClientRect();
+  mouseDownX= e.clientX - rect.left;
+  mouseDownY= e.clientY - rect.top;
+  didMove=false;
+  isMouseDown=true;
+
+  // Did we click on a booth?
+  if(e.target.classList.contains("booth")){
+    const clickedBooth= booths.find(b=> b.element=== e.target);
+    if(!clickedBooth)return; // safe check
+
+    if(e.shiftKey){
+      // SHIFT => toggle selection, no dragging
+      setSelected(clickedBooth, !clickedBooth.selected);
+      isDraggingSelection=false;
+      return;
+    }
+
+    // No shift => if booth is not selected, unselect all, select it
+    if(!clickedBooth.selected){
+      booths.forEach(b=> setSelected(b,false));
+      setSelected(clickedBooth,true);
+    }
+
+    // now if we have a selection (including clicked booth), we do multi-drag
+    isDraggingSelection=true;
+    dragOffsets=[];
+    selectionBounding= getSelectionBounds();
+    const groupLeft= selectionBounding.x;
+    const groupTop = selectionBounding.y;
+
+    // The mouse offset inside bounding box
+    const mouseOffsetX= mouseDownX- groupLeft;
+    const mouseOffsetY= mouseDownY- groupTop;
+
+    // For each selected booth, store relative offsets
+    booths.forEach(b=>{
+      if(b.selected){
+        let relX= b.x- groupLeft;
+        let relY= b.y- groupTop;
+        dragOffsets.push({ booth:b, relX, relY });
+      }
+    });
+
+    // store bounding info
+    dragOffsets.push({
+      boundingBox: true,
+      mouseOffsetX,
+      mouseOffsetY,
+      width: selectionBounding.width,
+      height:selectionBounding.height
+    });
+  } else {
+    // clicked empty space => if no move => place new booth
+    isDraggingSelection=false;
+  }
+});
+
+mapEl.addEventListener("mousemove", e=>{
+  if(!isMouseDown) return;
+  const rect= mapEl.getBoundingClientRect();
+  const mx= e.clientX- rect.left;
+  const my= e.clientY- rect.top;
+
+  const dx= mx- mouseDownX;
+  const dy= my- mouseDownY;
+  if(Math.abs(dx)>DRAG_THRESHOLD || Math.abs(dy)>DRAG_THRESHOLD){
+    didMove=true;
+  }
+
+  if(isDraggingSelection && didMove && dragOffsets.length>0){
+    const boxData= dragOffsets.find(o=>o.boundingBox);
+    if(!boxData) return;
+    let groupW= boxData.width;
+    let groupH= boxData.height;
+
+    // new top-left
+    let groupLeft= mx- boxData.mouseOffsetX;
+    let groupTop = my- boxData.mouseOffsetY;
+
+    // snap bounding box
+    const snapped= snapGroupCoordinates(groupLeft,groupTop, groupW,groupH);
+    groupLeft= snapped.x;
+    groupTop = snapped.y;
+
+    // move each booth
+    dragOffsets.forEach(o=>{
+      if(o.boundingBox)return;
+      const newBx= groupLeft+ o.relX;
+      const newBy= groupTop + o.relY;
+
+      o.booth.x= newBx;
+      o.booth.y= newBy;
+      o.booth.element.style.left= newBx+"px";
+      o.booth.element.style.top = newBy+"px";
+    });
+  }
+});
+
+mapEl.addEventListener("mouseup", e=>{
+  if(!isMouseDown) return;
+  isMouseDown=false;
+
+  if(!didMove && !isDraggingSelection){
+    // place new booth
+    placeNewBooth(e);
+  }
+  isDraggingSelection=false;
+  dragOffsets=[];
+  selectionBounding=null;
+});
+
+mapEl.addEventListener("mouseleave", e=>{
+  if(isMouseDown){
+    isMouseDown=false;
+    if(!didMove && !isDraggingSelection){
+      placeNewBooth(e);
+    }
+  }
+  isDraggingSelection=false;
+  dragOffsets=[];
+  selectionBounding=null;
+});
+
+/////////////////////////////////////////////////////////////////////////////////////
+// placeNewBooth
+/////////////////////////////////////////////////////////////////////////////////////
+function placeNewBooth(e){
+  const rect= mapEl.getBoundingClientRect();
+  const mx= e.clientX- rect.left;
+  const my= e.clientY- rect.top;
+
+  // Determine chosen booth size
+  let wFt=0,hFt=0;
+  const choice=sizeSelect.value;
+  if(choice==="10x10"){
+    wFt=10; hFt=10;
+  } else if(choice==="10x20"){
+    wFt=20; hFt=10;
+  } else if(choice==="6.66x10"){
+    wFt=6.66; hFt=10;
+  } else if(choice==="custom"){
+    wFt= parseFloat(customWidthFtEl.value)||10;
+    hFt= parseFloat(customHeightFtEl.value)||10;
+  } else {
+    wFt=10; hFt=10;
+  }
+  let boothW= Math.round(wFt* FT_TO_PX);
+  let boothH= Math.round(hFt* FT_TO_PX);
+
+  let x= mx, y= my;
+  const mapW= mapEl.clientWidth;
+  const mapH= mapEl.clientHeight;
+  if(x+boothW> mapW) x= mapW- boothW;
+  if(y+boothH> mapH) y= mapH- boothH;
+  if(x<0)x=0;if(y<0)y=0;
+
+  const customLabel= labelInput.value.trim();
+  let boothLabel= customLabel || String(nextBoothNumber++);
+  labelInput.value="";
+
+  createBooth(boothLabel, x,y, boothW, boothH);
+}
+
+function createBooth(label,x,y,w,h){
+  const div= document.createElement("div");
+  div.className="booth";
+  div.style.left= x+"px";
+  div.style.top = y+"px";
+  div.style.width= w+"px";
+  div.style.height=h+"px";
+  div.textContent= label;
+
+  const b= {
+    label, x, y, width:w, height:h,
+    element: div,
+    selected:false
+  };
+  booths.push(b);
+  mapEl.appendChild(div);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+// getSelectionBounds => bounding box around all selected booths
+/////////////////////////////////////////////////////////////////////////////////////
+function getSelectionBounds(){
+  let sel= booths.filter(b=>b.selected);
+  if(sel.length===0){
+    return {x:0,y:0,width:0,height:0};
+  }
+  let minX=Infinity, maxX=-Infinity;
+  let minY=Infinity, maxY=-Infinity;
+  sel.forEach(b=>{
+    if(b.x<minX) minX=b.x;
+    if(b.y<minY) minY=b.y;
+    const bxr= b.x+ b.width;
+    const byb= b.y+ b.height;
+    if(bxr>maxX) maxX= bxr;
+    if(byb>maxY) maxY= byb;
+  });
+  return {
+    x: minX,
+    y: minY,
+    width:  maxX- minX,
+    height: maxY- minY
+  }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+// snapGroupCoordinates => snap bounding box as if it’s a single booth
+/////////////////////////////////////////////////////////////////////////////////////
+function snapGroupCoordinates(rawX,rawY,w,h){
+  let x=rawX,y=rawY;
+  // skip booths that are selected
+  booths.forEach(b=>{
+    if(b.selected) return; // skip
+
+    const bLeft  = b.x;
+    const bRight = b.x+b.width;
+    const bTop   = b.y;
+    const bBot   = b.y+b.height;
+
+    // horizontal
+    if(Math.abs(x-bRight)<=SNAP_THRESHOLD){
+      x=bRight;
+    }
+    if(Math.abs((x+w)- bLeft)<=SNAP_THRESHOLD){
+      x=bLeft- w;
+    }
+    if(Math.abs(x- bLeft)<=SNAP_THRESHOLD){
+      x=bLeft;
+    }
+    if(Math.abs((x+w)- bRight)<=SNAP_THRESHOLD){
+      x=bRight- w;
+    }
+
+    // vertical
+    if(Math.abs(y- bBot)<=SNAP_THRESHOLD){
+      y=bBot;
+    }
+    if(Math.abs((y+h)- bTop)<=SNAP_THRESHOLD){
+      y=bTop- h;
+    }
+    if(Math.abs(y- bTop)<=SNAP_THRESHOLD){
+      y=bTop;
+    }
+    if(Math.abs((y+h)- bBot)<=SNAP_THRESHOLD){
+      y=bBot- h;
+    }
+  });
+
+  // clamp
+  const mapW= mapEl.clientWidth;
+  const mapH= mapEl.clientHeight;
+  if(x<0)x=0;if(y<0)y=0;
+  if(x+w> mapW)x= mapW- w;
+  if(y+h> mapH)y= mapH- h;
+
+  return {x,y};
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+// UNDO
+/////////////////////////////////////////////////////////////////////////////////////
+undoBtn.addEventListener("click", ()=>{
+  if(booths.length>0){
+    const last= booths.pop();
+    mapEl.removeChild(last.element);
+
+    // if numeric label matches nextBoothNumber-1 => decrement
+    const numeric= parseInt(last.label,10);
+    if(!isNaN(numeric)&& numeric=== nextBoothNumber-1){
+      nextBoothNumber--;
+    }
+  }
+});
+
+/////////////////////////////////////////////////////////////////////////////////////
+// LOAD JSON
+/////////////////////////////////////////////////////////////////////////////////////
+loadBtn.addEventListener("click", ()=>{
+  fileInput.click();
+});
+fileInput.addEventListener("change", e=>{
+  if(!fileInput.files||!fileInput.files[0])return;
+  const file= fileInput.files[0];
+  const reader= new FileReader();
+  reader.onload= evt=>{
+    try {
+      const data= JSON.parse(evt.target.result);
+      planeWidthEl.value= data.planeWidth||600;
+      planeHeightEl.value= data.planeHeight||1000;
+      applyPlaneBtn.click();
+
+      // clear
+      booths.forEach(b=> mapEl.removeChild(b.element));
+      booths.length=0;
+
+      // create from data
+      data.booths.forEach(b=>{
+        createBooth(b.label, b.x,b.y, b.width,b.height);
+      });
+    } catch(err){
+      alert("Error loading JSON: "+ err);
+    }
+    fileInput.value="";
+  };
+  reader.readAsText(file);
+});
+
+/////////////////////////////////////////////////////////////////////////////////////
+// EXPORT JSON
+/////////////////////////////////////////////////////////////////////////////////////
+exportBtn.addEventListener("click", ()=>{
+  const w= parseInt(planeWidthEl.value,10)||600;
+  const h= parseInt(planeHeightEl.value,10)||1000;
+
+  const data={
+    planeWidth: w,
+    planeHeight:h,
+    booths: booths.map(b=>({
+      label:b.label,
+      x:b.x, y:b.y,
+      width:b.width, height:b.height
+    }))
+  };
+  const json= JSON.stringify(data,null,2);
+  const blob= new Blob([json], {type:"application/json"});
+  const url= URL.createObjectURL(blob);
+  const a= document.createElement("a");
+  a.href= url;
+  a.download= "map_layout.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+</script>
+
+</body>
+</html>
