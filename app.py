@@ -17,93 +17,79 @@ app.jinja_options = {
     'comment_end_string': '#)'
 }
 
-def parse_prefixes_in_location(loc_str):
+def parse_token(token):
     """
-    Given the occupant's location string (e.g. 'S25 SX100 P32'),
-    return a set of detected prefixes: {'S','SX','P'} etc.
+    Given a location token like "S25", "P14", "K1", or "OF2",
+    return (prefix, booth_label) such that:
+      - "S25" => ( "S",  "25" )
+      - "P14" => ( "P",  "14" )
+      - "K1"  => ( "K",  "K1" )   # keep the entire token as booth label
+      - "OF2" => ( "OF", "OF2" )  # keep entire token
+      - "39"  => ( "",   "39" )   # no prefix, numeric booth label
     """
-    if not loc_str or loc_str.strip().upper() == "N/A":
-        return set()
+    up = token.upper().strip()
+    if up.startswith("S"):
+        # "S25" => prefix "S", booth "25"
+        return ("S", up[1:])
+    if up.startswith("P"):
+        # "P12" => prefix "P", booth "12"
+        return ("P", up[1:])
+    if up.startswith("K"):
+        # "K5" => prefix "K", booth "K5"
+        return ("K", up)
+    if up.startswith("OF"):
+        # "OF2" => prefix "OF", booth "OF2"
+        return ("OF", up)
+    # else no recognized prefix => entire token is the booth label
+    return ("", up)
 
-    results = set()
-    tokens = loc_str.strip().split()
-    for t in tokens:
-        up = t.upper()
-        if up.startswith("SX"):
-            results.add("SX")
-        elif up.startswith("PX"):
-            results.add("PX")
-        elif up.startswith("KX"):
-            results.add("KX")
-        elif up.startswith("OFX"):
-            results.add("OFX")
-        elif up.startswith("S"):
-            results.add("S")
-        elif up.startswith("P"):
-            results.add("P")
-        elif up.startswith("K"):
-            results.add("K")
-        elif up.startswith("OF"):
-            results.add("OF")
-        # else no prefix recognized => ignore
-    return results
 
 def occupantColor(occupant_list):
     """
-    Decide booth color by checking occupant prefixes (SX/PX/KX/OFX or S/P/K/OF).
-    If none found, revert to old logic:
-      - If occupant name has 'company storage' => blue
-      - Else if total balance > 0 => red
-      - Else => green
+    1) If total rent due >0 => red
+    2) Else check occupant prefixes:
+        - if prefix "S" => purple
+        - if prefix "P" => blue
+        - if prefix "K" => orange
+        - if prefix "OF" => pink
+       If multiple occupants have different prefixes, we pick in order S->P->K->OF
+    3) If no prefix => green
     """
 
-    # Gather all prefixes & total balance
-    all_prefixes = set()
-    total_bal = 0.0
-    has_company_storage = False
-
-    for occ in occupant_list:
-        loc = occ.get("location","")
-        pfx_set = parse_prefixes_in_location(loc)
-        all_prefixes |= pfx_set  # union
-        total_bal += occ.get("balance", 0.0)
-
-        # Check occupant name for "company storage"
-        if "company storage" in occ["occupant_name"].lower():
-            has_company_storage = True
-
-    # 1) Extended prefixes first
-    if "SX" in all_prefixes:
-        return "brown"    # e.g. SX => Storage Extended
-    if "PX" in all_prefixes:
-        return "cyan"     # PX => Pantry Extended
-    if "KX" in all_prefixes:
-        return "lime"     # KX => Kitchen Extended
-    if "OFX" in all_prefixes:
-        return "gold"     # OFX => Office Extended
-
-    # 2) Then simpler ones
-    if "S" in all_prefixes:
-        return "purple"   # S => Storage
-    if "P" in all_prefixes:
-        return "blue"     # P => Pantry
-    if "K" in all_prefixes:
-        return "orange"   # K => Kitchen
-    if "OF" in all_prefixes:
-        return "pink"     # OF => Office
-
-    # 3) No prefixes => fallback to your original logic
-    if has_company_storage:
-        return "blue"
-    elif total_bal > 0:
+    # 1) If occupant behind on rent => red
+    total_bal = sum(o["balance"] for o in occupant_list)
+    if total_bal > 0:
         return "red"
-    else:
-        return "green"
+
+    # 2) gather all prefixes from occupant data
+    prefix_set = set()
+    for occ in occupant_list:
+        loc_str = occ.get("location","").strip()
+        if loc_str:
+            tokens = loc_str.split()
+            for t in tokens:
+                pfx, _ = parse_token(t)
+                if pfx:
+                    prefix_set.add(pfx)
+
+    # In case multiple occupants => pick color by priority
+    # e.g. if there's any occupant with prefix "S", we do purple first, else "P" => blue, else "K" => orange, etc.
+    if "S"  in prefix_set:
+        return "purple"
+    if "P"  in prefix_set:
+        return "blue"
+    if "K"  in prefix_set:
+        return "orange"
+    if "OF" in prefix_set:
+        return "pink"
+
+    # 3) no prefix => green
+    return "green"
 
 
 @app.route("/")
 def index():
-    # 1) occupant data, filter for "Visitors Flea Market"
+    # 1) occupant data
     all_data = get_leases_data()
     filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
@@ -122,31 +108,31 @@ def index():
     booths = []
     if map_data:
         planeW = map_data.get("planeWidth", 600)
-        planeH = map_data.get("planeHeight",1000)
+        planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label: [ occupantData,... ] }
+    # occupant_map => { booth_label: [ occupantDict, occupantDict, ... ] }
     occupant_map = {}
     for row in filtered:
-        occupant = row["occupant_name"]
-        loc_str  = row["location"].strip()
-        bal      = row["balance"]
-        lease_id = row["lease_id"]
-        end_date = row["lease_end_date"]
+        occupant    = row["occupant_name"]
+        loc_str     = row["location"].strip()
+        bal         = row["balance"]
+        lease_id    = row["lease_id"]
+        end_date    = row["lease_end_date"]
 
-        if loc_str != "N/A" and loc_str != "":
-            booth_list = loc_str.split()
-            for b_label in booth_list:
-                # Store occupant data, including the full loc_str for prefix parsing
-                occupant_map.setdefault(b_label, []).append({
+        if loc_str and loc_str != "N/A":
+            tokens = loc_str.split()
+            for t in tokens:
+                pfx, booth_lbl = parse_token(t)
+                occupant_map.setdefault(booth_lbl, []).append({
                     "occupant_name": occupant,
                     "lease_id": lease_id,
                     "lease_end": end_date,
                     "balance": bal,
-                    "location": loc_str  # <--- store entire location string
+                    "location": loc_str
                 })
 
-    # 3) Color code the booths & assign occupant array
+    # 3) color-code the booths
     for b in booths:
         label = b.get("label","").strip()
         occupant_list = occupant_map.get(label, [])
@@ -156,27 +142,34 @@ def index():
             b["occupants"] = []
         else:
             b["occupants"] = occupant_list
-            # Now pick the color using new prefix logic
             booth_color = occupantColor(occupant_list)
             b["color"] = booth_color
 
-    # 4) Final HTML w/ just a short scaling step in JS
+    # 4) Final HTML (pinned legend)
     html_template= """
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8"/>
-  <!-- IMPORTANT for mobile responsiveness -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>VFM - Map Only w/ .env API keys</title>
+  <title>VFM - Mixed S/P (Numeric) & K/OF (Lettered)</title>
   <style>
   body {
     font-family: sans-serif;
     margin: 20px;
   }
+
   .legend {
-    margin-bottom: 1rem;
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 200px;
+    background: #fff;
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    z-index: 999;
   }
   .legend-item {
     display: flex;
@@ -197,7 +190,6 @@ def index():
     background: #fff;
     max-width: 100%;
     position: relative;
-    /* We'll set planeWidth × planeHeight inline, as you do below */
   }
   .booth {
     position: absolute;
@@ -214,30 +206,40 @@ def index():
   </style>
 </head>
 <body>
-  <h1>Visitors Flea Market - Map Only (.env for API keys)</h1>
+  <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <!-- Legend -->
   <div class="legend">
     <div class="legend-item">
-      <div class="color-box" style="background:green;"></div>
-      <span>No Amount Due</span>
-    </div>
-    <div class="legend-item">
       <div class="color-box" style="background:red;"></div>
-      <span>Past Due</span>
-    </div>
-    <div class="legend-item">
-      <div class="color-box" style="background:blue;"></div>
-      <span>Company Storage or P-Pantry</span>
+      <span>Behind on Rent</span>
     </div>
     <div class="legend-item">
       <div class="color-box" style="background:gray;"></div>
       <span>Vacant</span>
     </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:purple;"></div>
+      <span>S + number => e.g. "S24"</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:blue;"></div>
+      <span>P + number => e.g. "P14"</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:orange;"></div>
+      <span>K + number => e.g. "K1"</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:pink;"></div>
+      <span>OF + number => e.g. "OF2"</span>
+    </div>
+    <div class="legend-item">
+      <div class="color-box" style="background:green;"></div>
+      <span>No prefix + No rent => Green</span>
+    </div>
   </div>
 
   (% if booths|length > 0 %)
-    <!-- Same inline style for pixel size -->
     <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
     <script>
     function initMap() {
@@ -282,11 +284,9 @@ def index():
         ctn.appendChild(div);
       });
 
-      // NEW: If the container is wider than the phone screen, scale to fit
-      // We'll compare planeWidth to container's parent width (or screen width).
-      let containerParent = ctn.parentNode; // or document.body
+      // phone/screen narrower => scale
+      let containerParent = ctn.parentNode;
       let actualWidth = containerParent.clientWidth;
-      // If phone is narrower than planeWidth => scale it
       if (planeWidth > 0 && actualWidth < planeWidth) {
         let scale = actualWidth / planeWidth;
         ctn.style.transformOrigin = "top left";
