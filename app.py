@@ -20,11 +20,11 @@ app.jinja_options = {
 def parse_token(token):
     """
     If token starts with 'S' or 'P', strip that letter => numeric booth label.
-    e.g. 'S24' => prefix 'S', booth '24'
-         'P10' => prefix 'P', booth '10'
+      e.g. 'S24' => prefix 'S', booth '24'
+           'P10' => prefix 'P', booth '10'
     If token starts with 'K' or 'OF', keep entire token => lettered booth
-         'K1' => prefix 'K', booth 'K1'
-         'OF2' => prefix 'OF', booth 'OF2'
+      e.g. 'K1' => prefix 'K', booth 'K1'
+           'OF2' => prefix 'OF', booth 'OF2'
     Otherwise => no prefix => raw token as booth label.
     """
     up = token.upper().strip()
@@ -47,7 +47,7 @@ def occupantColor(occupant_list):
       3) Else prefix-based:
          S => #a7aae6
          P => #84c7ff
-         K => #f9b8cd
+         K => #ffb884  (changed here to be more distinct from red)
          OF => #ffca7a
       4) Else => #8ae89f (On Time)
     """
@@ -60,7 +60,7 @@ def occupantColor(occupant_list):
     has_company_storage = any("company storage" in o["occupant_name"].lower()
                               for o in occupant_list)
     if has_company_storage:
-        # Slightly darker pastel purple
+        # Slightly darker pastel purple for company storage
         return "#bca4ff"
 
     # Else check prefix
@@ -78,12 +78,13 @@ def occupantColor(occupant_list):
     if "P" in prefix_set:
         return "#84c7ff"  # Pantry
     if "K" in prefix_set:
-        return "#f9b8cd"  # Kitchen
+        return "#ffb884"  # Kitchen (new pastel orange)
     if "OF" in prefix_set:
         return "#ffca7a"  # Office
 
     # Otherwise => On Time => #8ae89f
     return "#8ae89f"
+
 
 @app.route("/")
 def index():
@@ -231,7 +232,7 @@ def index():
         <span>Office</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:#f9b8cd;"></div>
+        <div class="color-box" style="background:#ffb884;"></div>
         <span>Kitchen</span>
       </div>
       <div class="legend-item">
@@ -272,7 +273,7 @@ def index():
 
         div.textContent = b.label;
 
-        // Slightly darker pastel color
+        // Slightly darker pastel color (Kitchen => #ffb884, etc.)
         div.style.backgroundColor = b.color || "#bdbdbd"; 
 
         let occList = b.occupants || [];
