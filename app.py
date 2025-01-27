@@ -33,37 +33,33 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)
+        return ("K", up)          # 'K3' => prefix 'K', booth 'K3'
     if up.startswith("OF"):
-        return ("OF", up)
+        return ("OF", up)         # 'OF2' => prefix 'OF', booth 'OF2'
     return ("", up)
 
 def occupantColor(occupant_list):
     """
     Slightly darker pastel color logic:
-
       1) If total_bal > 0 => Past Due => #ff8a8a
       2) If occupant_name has 'company storage' => #bca4ff
       3) Else prefix-based:
-         S => #a7aae6
-         P => #84c7ff
-         K => #ffb884  (changed here to be more distinct from red)
-         OF => #ffca7a
-      4) Else => #8ae89f (On Time)
+         S => #a7aae6        (Storage)
+         P => #84c7ff        (Pantry)
+         K => #72f0d5        (Kitchen, pastel teal)
+         OF => #ffca7a       (Office)
+      4) Else => #8ae89f     (On Time)
     """
     total_bal = sum(o["balance"] for o in occupant_list)
     if total_bal > 0:
-        # Past due
-        return "#ff8a8a"
+        return "#ff8a8a"  # Past due
 
-    # Check occupant name for "company storage"
     has_company_storage = any("company storage" in o["occupant_name"].lower()
                               for o in occupant_list)
     if has_company_storage:
-        # Slightly darker pastel purple for company storage
-        return "#bca4ff"
+        return "#bca4ff"  # Company Storage => pastel purple
 
-    # Else check prefix
+    # Check prefix
     prefix_set = set()
     for occ in occupant_list:
         loc_str = occ.get("location","").strip()
@@ -74,17 +70,16 @@ def occupantColor(occupant_list):
 
     # Priority S->P->K->OF
     if "S" in prefix_set:
-        return "#a7aae6"  # Storage
+        return "#a7aae6"  
     if "P" in prefix_set:
-        return "#84c7ff"  # Pantry
+        return "#84c7ff"
     if "K" in prefix_set:
-        return "#ffb884"  # Kitchen (new pastel orange)
+        return "#72f0d5"
     if "OF" in prefix_set:
-        return "#ffca7a"  # Office
+        return "#ffca7a"
 
-    # Otherwise => On Time => #8ae89f
+    # Otherwise => On Time
     return "#8ae89f"
-
 
 @app.route("/")
 def index():
@@ -110,11 +105,11 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label.upper(): [ occupantData, ... ] }
+    # occupant_map => { booth_label.upper().strip(): [ occupantData, ... ] }
     occupant_map = {}
     for row in filtered:
         occupant_name = row["occupant_name"]
-        loc_str       = row["location"].strip()
+        loc_str       = (row["location"] or "").strip()
         bal           = row["balance"]
         lease_id      = row["lease_id"]
         end_date      = row["lease_end_date"]
@@ -122,7 +117,9 @@ def index():
         if loc_str and loc_str != "N/A":
             for t in loc_str.split():
                 pfx, booth_lbl = parse_token(t)
-                occupant_map.setdefault(booth_lbl.upper(), []).append({
+                # Force uppercase & strip for occupant side
+                booth_key = booth_lbl.upper().strip()
+                occupant_map.setdefault(booth_key, []).append({
                     "occupant_name": occupant_name,
                     "lease_id": lease_id,
                     "lease_end": end_date,
@@ -132,16 +129,17 @@ def index():
 
     # 3) color-code each booth
     for b in booths:
-        original_label = b.get("label","").strip()
-        label_up       = original_label.upper()
+        # Also strip any trailing spaces from the booth label
+        original_label = (b.get("label","").strip())
+        label_up       = original_label.upper().strip()
+
         occupant_list  = occupant_map.get(label_up, [])
         if occupant_list:
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
         else:
             b["occupants"] = []
-            # Slightly darker pastel gray for vacant
-            b["color"]     = "#bdbdbd"
+            b["color"]     = "#bdbdbd"  # vacant pastel gray
 
     # 4) Final HTML
     html_template= """
@@ -161,12 +159,10 @@ def index():
       text-align: center;
       margin: 20px 0 10px;
     }
-
     .pageContent {
-      padding-bottom: 90px; /* so the bottom legend won't cover the map */
+      padding-bottom: 90px;
       margin: 0 20px;
     }
-
     .legend {
       position: fixed;
       bottom: 0;
@@ -191,7 +187,6 @@ def index():
       margin-right: 6px;
       border: 2px solid #333;
     }
-
     #mapContainer {
       display: block;
       margin: 0 auto;
@@ -202,7 +197,7 @@ def index():
     .booth {
       position: absolute;
       box-sizing: border-box;
-      border: 2px solid #111; 
+      border: 2px solid #111;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -222,7 +217,6 @@ def index():
     </div>
 
     <div class="legend">
-      <!-- Slightly darker pastel colors in legend -->
       <div class="legend-item">
         <div class="color-box" style="background:#84c7ff;"></div>
         <span>Pantry</span>
@@ -232,7 +226,7 @@ def index():
         <span>Office</span>
       </div>
       <div class="legend-item">
-        <div class="color-box" style="background:#ffb884;"></div>
+        <div class="color-box" style="background:#72f0d5;"></div>
         <span>Kitchen</span>
       </div>
       <div class="legend-item">
@@ -272,8 +266,6 @@ def index():
         div.style.height = b.height + "px";
 
         div.textContent = b.label;
-
-        // Slightly darker pastel color (Kitchen => #ffb884, etc.)
         div.style.backgroundColor = b.color || "#bdbdbd"; 
 
         let occList = b.occupants || [];
@@ -316,10 +308,11 @@ def index():
 </html>
     """
 
+    # Convert booths to JSON
     from json import dumps
     booth_json_str = dumps(booths)
 
-    # Insert plane size & booth data
+    # Replace placeholders
     rendered = render_template_string(html_template, booths=booths)
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
