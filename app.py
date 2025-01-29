@@ -212,13 +212,13 @@ def index():
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <!-- ADDED BUTTON FOR WORLD FOOD TRUCKS -->
+  <!-- UPDATED: REMOVED target="_blank" -->
   <div style="text-align:center; margin-bottom:10px;">
-    <a href="https://wftmap-c2a97a915c23.herokuapp.com/" target="_blank">
+    <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
       <button>World Food Trucks</button>
     </a>
   </div>
-  <!-- END ADDED BUTTON -->
+  <!-- END UPDATED BUTTON -->
 
   (% if booths|length > 0 %)
     <div class="pageContent">
