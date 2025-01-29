@@ -2,7 +2,8 @@
 
 import os
 import json
-from flask import Flask, render_template_string
+from functools import wraps
+from flask import Flask, render_template_string, request, Response
 from occupant_service import get_leases_data
 
 app = Flask(__name__)
@@ -16,6 +17,37 @@ app.jinja_options = {
     'comment_start_string': '(#',
     'comment_end_string': '#)'
 }
+
+USERNAME = "Visitors Plaza"
+PASSWORD = "11qq22ww"
+
+def check_auth(username, password):
+    """
+    Check if a username and password combination is valid.
+    """
+    return username == USERNAME and password == PASSWORD
+
+def authenticate():
+    """
+    Sends a 401 response that enables basic auth.
+    """
+    return Response(
+        'Please provide valid credentials.\n',
+        401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    )
+
+def requires_auth(f):
+    """
+    Decorator to prompt for username/password and check them.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 def parse_token(token):
     """
@@ -33,9 +65,9 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)          # 'K3' => prefix 'K', booth 'K3'
+        return ("K", up)  # e.g. 'K3'
     if up.startswith("OF"):
-        return ("OF", up)         # 'OF2' => prefix 'OF', booth 'OF2'
+        return ("OF", up) # e.g. 'OF2'
     return ("", up)
 
 def occupantColor(occupant_list):
@@ -46,7 +78,7 @@ def occupantColor(occupant_list):
       3) Else prefix-based:
          S => #a7aae6        (Storage)
          P => #84c7ff        (Pantry)
-         K => #72f0d5        (Kitchen, pastel teal)
+         K => #72f0d5        (Kitchen)
          OF => #ffca7a       (Office)
       4) Else => #8ae89f     (On Time)
     """
@@ -70,7 +102,7 @@ def occupantColor(occupant_list):
 
     # Priority S->P->K->OF
     if "S" in prefix_set:
-        return "#a7aae6"  
+        return "#a7aae6"
     if "P" in prefix_set:
         return "#84c7ff"
     if "K" in prefix_set:
@@ -82,6 +114,7 @@ def occupantColor(occupant_list):
     return "#8ae89f"
 
 @app.route("/")
+@requires_auth
 def index():
     # 1) occupant data
     all_data = get_leases_data()
@@ -117,7 +150,7 @@ def index():
         if loc_str and loc_str != "N/A":
             for t in loc_str.split():
                 pfx, booth_lbl = parse_token(t)
-                # Force uppercase & strip for occupant side
+                # Force uppercase & strip
                 booth_key = booth_lbl.upper().strip()
                 occupant_map.setdefault(booth_key, []).append({
                     "occupant_name": occupant_name,
@@ -129,7 +162,6 @@ def index():
 
     # 3) color-code each booth
     for b in booths:
-        # Also strip any trailing spaces from the booth label
         original_label = (b.get("label","").strip())
         label_up       = original_label.upper().strip()
 
@@ -142,7 +174,7 @@ def index():
             b["color"]     = "#bdbdbd"  # vacant pastel gray
 
     # 4) Final HTML
-    html_template= """
+    html_template = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -180,7 +212,7 @@ def index():
       display: flex;
       align-items: center;
       margin: 4px 8px;
-      cursor: pointer; /* ADDED so it's clear these items are clickable */
+      cursor: pointer;
     }
     .color-box {
       width: 20px;
@@ -226,7 +258,6 @@ def index():
     </div>
 
     <div class="legend">
-      <!-- ADDED ONCLICK EVENTS BELOW FOR LEGEND ITEMS -->
       <div class="legend-item" onclick="alert('Pantry - Space rented by food truck vendors for dry, cold, wet storage. Some have walk in freezers, coolers. Some have offices.')">
         <div class="color-box" style="background:#84c7ff;"></div>
         <span>Pantry</span>
@@ -255,7 +286,6 @@ def index():
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
       </div>
-      <!-- END ADDED ONCLICK EVENTS -->
     </div>
 
     <script>
@@ -319,11 +349,9 @@ def index():
 </html>
     """
 
-    # Convert booths to JSON
     from json import dumps
     booth_json_str = dumps(booths)
 
-    # Replace placeholders
     rendered = render_template_string(html_template, booths=booths)
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
