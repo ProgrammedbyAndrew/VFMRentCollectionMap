@@ -180,6 +180,7 @@ def index():
       display: flex;
       align-items: center;
       margin: 4px 8px;
+      cursor: pointer; /* ADDED so it's clear these items are clickable */
     }
     .color-box {
       width: 20px;
@@ -211,40 +212,50 @@ def index():
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
+  <!-- ADDED BUTTON FOR WORLD FOOD TRUCKS -->
+  <div style="text-align:center; margin-bottom:10px;">
+    <a href="https://wftmap-c2a97a915c23.herokuapp.com/" target="_blank">
+      <button>World Food Trucks</button>
+    </a>
+  </div>
+  <!-- END ADDED BUTTON -->
+
   (% if booths|length > 0 %)
     <div class="pageContent">
       <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
     </div>
 
     <div class="legend">
-      <div class="legend-item">
+      <!-- ADDED ONCLICK EVENTS BELOW FOR LEGEND ITEMS -->
+      <div class="legend-item" onclick="alert('Pantry - Space rented by food truck vendors for dry, cold, wet storage. Some have walk in freezers, coolers. Some have offices.')">
         <div class="color-box" style="background:#84c7ff;"></div>
         <span>Pantry</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('Office Space - Real built out offices near main management offices')">
         <div class="color-box" style="background:#ffca7a;"></div>
         <span>Office</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('Kitchen - Areas used by food operators to prepare or store food.')">
         <div class="color-box" style="background:#72f0d5;"></div>
         <span>Kitchen</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('Vacant - This booth is currently unoccupied or empty.')">
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments.')">
         <div class="color-box" style="background:#ff8a8a;"></div>
         <span>Past Due</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('On Time $0 - Occupant is fully paid up.')">
         <div class="color-box" style="background:#8ae89f;"></div>
         <span>On Time $0</span>
       </div>
-      <div class="legend-item">
+      <div class="legend-item" onclick="alert('Company Storage - Space used as company storage to store operation items like stages and other misc equipment')">
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
       </div>
+      <!-- END ADDED ONCLICK EVENTS -->
     </div>
 
     <script>
