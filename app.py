@@ -3,14 +3,17 @@
 import os
 import json
 from functools import wraps
-from flask import Flask, render_template_string, request, redirect, url_for, session
+from flask import (
+    Flask, render_template_string, request,
+    redirect, url_for, session
+)
 from occupant_service import get_leases_data
 
 app = Flask(__name__)
 # IMPORTANT: Change this to a strong, random value in production
 app.secret_key = "c7aebdfef4b2cf300ceafc1231f683b3404a4f59799af4278b7da3deef8ef53a"
 
-# Keep your custom Jinja delimiters
+# Keep your custom Jinja delimiters if desired
 app.jinja_options = {
     'block_start_string': '(%',
     'block_end_string': '%)',
@@ -24,13 +27,116 @@ USERNAME = "Visitors Plaza"
 PASSWORD = "11qq22ww"
 
 #
-# Custom login page route
+# -- MODERN, STYLED LOGIN PAGE --
+#
+login_page_html = """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sign into Visitors Plaza Rent Collection Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+    body {
+      margin: 0; 
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      /* Modern gradient background */
+      background: linear-gradient(45deg, #52A0FD, #00C6FF);
+    }
+    .login-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh; /* Full viewport height */
+      padding: 0 20px; /* Some padding for smaller screens */
+      box-sizing: border-box;
+    }
+    .login-box {
+      background: #fff;
+      width: 100%;
+      max-width: 380px;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    .login-box h2 {
+      margin-bottom: 20px;
+    }
+    .login-box .form-group {
+      text-align: left;
+      margin-bottom: 15px;
+    }
+    .login-box label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .login-box input[type="text"],
+    .login-box input[type="password"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    .error-message {
+      color: red;
+      margin-bottom: 15px;
+    }
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      background: #00C6FF;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      font-weight: bold;
+    }
+    .login-box button:hover {
+      background: #52A0FD;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-box">
+      <h2>Sign into Visitors Plaza Rent Collection Map</h2>
+      {% if error_message %}
+        <div class="error-message">{{ error_message }}</div>
+      {% endif %}
+      <form method="POST">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input name="username" id="username" type="text" required autofocus />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input name="password" id="password" type="password" required />
+        </div>
+        <button type="submit">Log In</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+#
+# -- LOGIN ROUTE --
 #
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """
-    Renders a custom HTML form for username/password.
-    If valid credentials, sets session['logged_in'] = True and redirects to '/'
+    Displays a modern styled login form. On POST, checks credentials;
+    if correct, sets session['logged_in'] and redirects to index.
+    Otherwise, shows an error message.
     """
     if request.method == "POST":
         form_user = request.form.get("username", "")
@@ -39,61 +145,16 @@ def login():
             session["logged_in"] = True
             return redirect(url_for("index"))
         else:
-            # Invalid credentials => show an error and re-render the form
-            return render_template_string("""
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>Sign into Visitors Plaza Rent Collection Map</title>
-            </head>
-            <body>
-              <h2>Sign into Visitors Plaza Rent Collection Map</h2>
-              <p style="color:red;">Invalid credentials, please try again.</p>
-              <form method="POST">
-                <div>
-                  <label for="username">Username:</label>
-                  <input name="username" id="username" autofocus />
-                </div>
-                <br>
-                <div>
-                  <label for="password">Password:</label>
-                  <input type="password" name="password" id="password" />
-                </div>
-                <br>
-                <button type="submit">Log In</button>
-              </form>
-            </body>
-            </html>
-            """)
-    else:
-        # If GET request, just show the blank form
-        return render_template_string("""
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Sign into Visitors Plaza Rent Collection Map</title>
-        </head>
-        <body>
-          <h2>Sign into Visitors Plaza Rent Collection Map</h2>
-          <form method="POST">
-            <div>
-              <label for="username">Username:</label>
-              <input name="username" id="username" autofocus />
-            </div>
-            <br>
-            <div>
-              <label for="password">Password:</label>
-              <input type="password" name="password" id="password" />
-            </div>
-            <br>
-            <button type="submit">Log In</button>
-          </form>
-        </body>
-        </html>
-        """)
+            # Invalid credentials => show an error
+            return render_template_string(
+                login_page_html,
+                error_message="Invalid credentials. Please try again."
+            )
+    # For GET => show the blank form
+    return render_template_string(login_page_html, error_message=None)
 
 #
-# Simple decorator to require login via session
+# -- PROTECT ROUTES WITH SESSION-BASED AUTH CHECK --
 #
 def login_required(f):
     @wraps(f)
@@ -104,17 +165,15 @@ def login_required(f):
     return wrapper
 
 #
-# Helper function to parse tokens from occupant location text
+# -- HELPER FUNCTIONS FOR YOUR MAP/BOOTH LOGIC --
 #
 def parse_token(token):
     """
     If token starts with 'S' or 'P', strip that letter => numeric booth label.
-      e.g. 'S24' => prefix 'S', booth '24'
-           'P10' => prefix 'P', booth '10'
+      e.g. 'S24' => ('S','24'), 'P10' => ('P','10')
     If token starts with 'K' or 'OF', keep entire token => lettered booth
-      e.g. 'K1' => prefix 'K', booth 'K1'
-           'OF2' => prefix 'OF', booth 'OF2'
-    Otherwise => no prefix => raw token as booth label.
+      e.g. 'K1' => ('K','K1'), 'OF2' => ('OF','OF2')
+    Otherwise => ('', up)
     """
     up = token.upper().strip()
     if up.startswith("S"):
@@ -122,24 +181,21 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)  # e.g. 'K3'
+        return ("K", up)  
     if up.startswith("OF"):
-        return ("OF", up) # e.g. 'OF2'
+        return ("OF", up)
     return ("", up)
 
-#
-# Helper function to set occupant color based on occupant data
-#
 def occupantColor(occupant_list):
     """
     Slightly darker pastel color logic:
       1) If total_bal > 0 => Past Due => #ff8a8a
       2) If occupant_name has 'company storage' => #bca4ff
       3) Else prefix-based:
-         S => #a7aae6        (Storage)
-         P => #84c7ff        (Pantry)
-         K => #72f0d5        (Kitchen)
-         OF => #ffca7a       (Office)
+         S => #a7aae6 (Storage)
+         P => #84c7ff (Pantry)
+         K => #72f0d5 (Kitchen)
+         OF => #ffca7a (Office)
       4) Otherwise => #8ae89f (On Time)
     """
     total_bal = sum(o["balance"] for o in occupant_list)
@@ -154,7 +210,7 @@ def occupantColor(occupant_list):
     # Check prefix
     prefix_set = set()
     for occ in occupant_list:
-        loc_str = occ.get("location","").strip()
+        loc_str = occ.get("location", "").strip()
         for t in loc_str.split():
             pfx, _ = parse_token(t)
             if pfx:
@@ -173,19 +229,19 @@ def occupantColor(occupant_list):
     return "#8ae89f"
 
 #
-# Main index route showing the map, protected by login
+# -- MAIN MAP PAGE (REQUIRES LOGIN) --
 #
 @app.route("/")
 @login_required
 def index():
-    # 1) occupant data
-    all_data = get_leases_data()  # from occupant_service
+    # 1) Get occupant data
+    all_data = get_leases_data()
     filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
     for row in filtered:
         print(row)
 
-    # 2) load map_layout.json
+    # 2) Load map_layout.json
     try:
         with open("map_layout.json", "r") as f:
             map_data = json.load(f)
@@ -200,7 +256,7 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label.upper().strip(): [ occupantData, ... ] }
+    # occupant_map => { booth_label: [ occupantData, ... ] }
     occupant_map = {}
     for row in filtered:
         occupant_name = row["occupant_name"]
@@ -221,7 +277,7 @@ def index():
                     "location": loc_str
                 })
 
-    # 3) color-code each booth
+    # 3) Color-code each booth & check if past due
     for b in booths:
         original_label = (b.get("label","").strip())
         label_up       = original_label.upper().strip()
@@ -231,8 +287,8 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
-            # If occupant is past due, revert fill color to prefix-based
-            # and set 'past_due' flag for a red border/text in the front-end
+            # If occupant is past due => revert fill color to prefix-based
+            # but use a red border & text
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
                 has_company_storage = any(
@@ -244,7 +300,7 @@ def index():
                 else:
                     prefix_set = set()
                     for occ in occupant_list:
-                        loc_str = occ.get("location", "").strip()
+                        loc_str = occ.get("location","").strip()
                         for t in loc_str.split():
                             pfx, _ = parse_token(t)
                             if pfx:
@@ -259,16 +315,12 @@ def index():
                         b["color"] = "#ffca7a"
                     else:
                         b["color"] = "#8ae89f"
-
                 b["past_due"] = True
-
         else:
             b["occupants"] = []
             b["color"]     = "#bdbdbd"  # vacant pastel gray
 
-    # -------------------
-    # ADD: Occupancy & Rent Collection
-    # -------------------
+    # 4) Calculate occupancy & rent collection stats
     total_spots = len(booths)
     occupied_spots = sum(1 for b in booths if len(b["occupants"]) > 0)
     occupancy_pct = round((occupied_spots / total_spots * 100), 1) if total_spots else 0
@@ -282,7 +334,7 @@ def index():
         (occupant_on_time / occupant_count * 100), 1
     ) if occupant_count else 0
 
-    # 4) Final HTML
+    # 5) Final HTML for the map
     html_template = """
 <!DOCTYPE html>
 <html>
@@ -479,7 +531,7 @@ def index():
         ctn.appendChild(div);
       });
 
-      // phone narrower => scale
+      // For narrow screens, scale down the map
       let containerParent = ctn.parentNode;
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
@@ -513,7 +565,7 @@ def index():
     return rendered
 
 #
-# Finally, run the app
+# -- RUN THE SERVER --
 #
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
