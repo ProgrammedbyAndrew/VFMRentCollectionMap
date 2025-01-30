@@ -27,7 +27,7 @@ USERNAME = "Visitors Plaza"
 PASSWORD = "11qq22ww"
 
 #
-# -- MODERN, STYLED LOGIN PAGE --
+# -- MODERN, STYLED LOGIN PAGE (BLACK BACKGROUND) --
 #
 login_page_html = """
 <!DOCTYPE html>
@@ -38,11 +38,12 @@ login_page_html = """
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
     body {
-      margin: 0; 
+      margin: 0;
       padding: 0;
       font-family: 'Roboto', sans-serif;
-      /* Modern gradient background */
-      background: linear-gradient(45deg, #52A0FD, #00C6FF);
+      /* Black background */
+      background: #000;
+      color: #fff;
     }
     .login-container {
       display: flex;
@@ -53,7 +54,7 @@ login_page_html = """
       box-sizing: border-box;
     }
     .login-box {
-      background: #fff;
+      background: #111; /* Slightly lighter black/gray */
       width: 100%;
       max-width: 380px;
       padding: 30px;
@@ -63,6 +64,7 @@ login_page_html = """
     }
     .login-box h2 {
       margin-bottom: 20px;
+      color: #fff;
     }
     .login-box .form-group {
       text-align: left;
@@ -78,19 +80,21 @@ login_page_html = """
     .login-box input[type="password"] {
       width: 100%;
       padding: 10px;
-      border: 1px solid #ccc;
+      border: 1px solid #444;
       border-radius: 4px;
       font-size: 16px;
       box-sizing: border-box;
+      background: #222;
+      color: #fff;
     }
     .error-message {
-      color: red;
+      color: #ff4b4b;
       margin-bottom: 15px;
     }
     .login-box button {
       width: 100%;
       padding: 12px;
-      background: #00C6FF;
+      background: #ff4b4b;
       border: none;
       border-radius: 4px;
       color: #fff;
@@ -100,7 +104,7 @@ login_page_html = """
       font-weight: bold;
     }
     .login-box button:hover {
-      background: #52A0FD;
+      background: #dc3545;
     }
   </style>
 </head>
@@ -181,7 +185,7 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)  
+        return ("K", up)
     if up.startswith("OF"):
         return ("OF", up)
     return ("", up)
