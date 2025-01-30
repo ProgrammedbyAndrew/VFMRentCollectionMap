@@ -13,22 +13,11 @@ app = Flask(__name__)
 # IMPORTANT: Change this to a strong, random value in production
 app.secret_key = "c7aebdfef4b2cf300ceafc1231f683b3404a4f59799af4278b7da3deef8ef53a"
 
-# -- We remove the custom jinja_options so that
-# -- Jinja uses the default {{ }} and {% %} syntax.
-# app.jinja_options = {
-#    'block_start_string': '(%',
-#    'block_end_string': '%)',
-#    'variable_start_string': '((',
-#    'variable_end_string': '))',
-#    'comment_start_string': '(#',
-#    'comment_end_string': '#)'
-# }
-
 USERNAME = "Visitors Plaza"
 PASSWORD = "11qq22ww"
 
 #
-# -- MODERN, STYLED LOGIN PAGE (Black Background, uses {{...}}) --
+# -- MODERN, STYLED LOGIN PAGE (Black background, normal Jinja syntax) --
 #
 login_page_html = """
 <!DOCTYPE html>
@@ -50,11 +39,11 @@ login_page_html = """
       justify-content: center;
       align-items: center;
       height: 100vh; /* Full viewport height */
-      padding: 0 20px; /* Some padding for smaller screens */
+      padding: 0 20px;
       box-sizing: border-box;
     }
     .login-box {
-      background: #111; /* Slightly lighter black/gray */
+      background: #111;
       width: 100%;
       max-width: 380px;
       padding: 30px;
@@ -137,11 +126,6 @@ login_page_html = """
 #
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """
-    Displays a modern styled login form. On POST, checks credentials;
-    if correct, sets session['logged_in'] and redirects to index.
-    Otherwise, shows an error message.
-    """
     if request.method == "POST":
         form_user = request.form.get("username", "")
         form_pass = request.form.get("password", "")
@@ -154,7 +138,7 @@ def login():
                 login_page_html,
                 error_message="Invalid credentials. Please try again."
             )
-    # For GET => show the blank form
+    # GET => show the blank form
     return render_template_string(login_page_html, error_message=None)
 
 #
@@ -172,11 +156,6 @@ def login_required(f):
 # -- HELPER FUNCTIONS FOR YOUR MAP/BOOTH LOGIC --
 #
 def parse_token(token):
-    """
-    If token starts with 'S' or 'P', strip that letter => numeric booth label.
-    If token starts with 'K' or 'OF', keep entire token => lettered booth.
-    Otherwise => raw token as booth label.
-    """
     up = token.upper().strip()
     if up.startswith("S"):
         return ("S", up[1:])
@@ -189,14 +168,6 @@ def parse_token(token):
     return ("", up)
 
 def occupantColor(occupant_list):
-    """
-    Slightly darker pastel color logic:
-      1) total_bal > 0 => Past Due (#ff8a8a)
-      2) occupant_name has 'company storage' => #bca4ff
-      3) Else prefix-based:
-         S => #a7aae6, P => #84c7ff, K => #72f0d5, OF => #ffca7a
-      4) Otherwise => #8ae89f
-    """
     total_bal = sum(o["balance"] for o in occupant_list)
     if total_bal > 0:
         return "#ff8a8a"  # Past due
@@ -233,7 +204,7 @@ def occupantColor(occupant_list):
 @app.route("/")
 @login_required
 def index():
-    # 1) Get occupant data
+    # 1) Load occupant data
     all_data = get_leases_data()
     filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
@@ -255,7 +226,7 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label: [ occupantData, ... ] }
+    # occupant_map => { booth_label.upper(): [ occupantData, ... ] }
     occupant_map = {}
     for row in filtered:
         occupant_name = row["occupant_name"]
@@ -286,10 +257,10 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
-            # If occupant is past due => revert fill color to prefix-based
-            # but use a red border & text
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
+                # Past due => red border, text
+                # but fill color is prefix-based or #8ae89f if none
                 has_company_storage = any(
                     "company storage" in o["occupant_name"].lower()
                     for o in occupant_list
@@ -299,8 +270,8 @@ def index():
                 else:
                     prefix_set = set()
                     for occ in occupant_list:
-                        loc_str = occ.get("location","").strip()
-                        for t in loc_str.split():
+                        loc_s = occ.get("location","").strip()
+                        for t in loc_s.split():
                             pfx, _ = parse_token(t)
                             if pfx:
                                 prefix_set.add(pfx)
@@ -314,6 +285,7 @@ def index():
                         b["color"] = "#ffca7a"
                     else:
                         b["color"] = "#8ae89f"
+
                 b["past_due"] = True
         else:
             b["occupants"] = []
@@ -333,7 +305,7 @@ def index():
         (occupant_on_time / occupant_count * 100), 1
     ) if occupant_count else 0
 
-    # 5) Final HTML for the map (using default {% ... %} and {{ ... }})
+    # 5) Final HTML with a TOGGLEABLE LEGEND
     html_template = """
 <!DOCTYPE html>
 <html>
@@ -346,6 +318,7 @@ def index():
       font-family: sans-serif;
       margin: 0;
       padding: 0;
+      background: #fff;
     }
     h1 {
       text-align: center;
@@ -354,36 +327,6 @@ def index():
     .pageContent {
       padding-bottom: 90px;
       margin: 0 20px;
-    }
-    .legend {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: #fff;
-      border-top: 2px solid #333;
-      padding: 8px;
-      z-index: 999;
-      display: flex;
-      justify-content: space-evenly;
-      flex-wrap: wrap;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      margin: 4px 8px;
-      cursor: pointer;
-    }
-    .color-box {
-      width: 20px;
-      height: 20px;
-      margin-right: 6px;
-      border: 2px solid #333;
-      position: relative;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 14px;
     }
     #mapContainer {
       display: block;
@@ -404,32 +347,111 @@ def index():
       color: #000;
       cursor: pointer;
     }
-    .legend-info {
-      cursor: default;
-      display: flex;
-      flex-direction: row;
+    /* If booth is past due, we set border in the JS for each booth, but normal styling above. */
+
+    /* Legend toggle button: bottom-right floating */
+    .legend-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #dc3545;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 9999;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    /* Semi-transparent overlay */
+    .legend-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(3px);
+      display: none; /* hidden by default */
+      z-index: 9998;
+      justify-content: center;
       align-items: center;
-      gap: 10px;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .legend-overlay.active {
+      display: flex;
+    }
+
+    /* White box in the center for legend items */
+    .legend-box {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 400px;
+      color: #000;
+    }
+    .legend-box h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 8px 0;
+      cursor: pointer;
+    }
+    .color-box {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      border: 2px solid #333;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 14px;
+    }
+    .x-icon {
+      color: #dc3545;
+      font-size: 16px;
+      font-weight: 300;
+      font-family: Arial, sans-serif !important; /* Force a non-emoji font */
+    }
+
+    /* A close button for the legend overlay, top-right inside the box */
+    .close-btn {
+      float: right;
+      cursor: pointer;
+      color: #999;
+      font-size: 20px;
+      transition: color 0.3s ease;
+    }
+    .close-btn:hover {
+      color: #333;
+    }
+
+    /* Legend stats row */
+    .legend-stats {
+      margin-top: 20px;
       font-weight: bold;
     }
-    button {
-      background: #dc3545; /* red */
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      margin: 5px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
+    .legend-stats span {
+      display: inline-block;
+      margin-right: 15px;
     }
   </style>
 </head>
 <body>
+
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
   <div style="text-align:center; margin-bottom:10px;">
     <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
-      <button>World Food Trucks</button>
+      <button style="background:#dc3545; color:#fff; border:none; padding:8px 16px; margin:5px; border-radius:4px; cursor:pointer; font-size:14px;">
+        World Food Trucks
+      </button>
     </a>
   </div>
 
@@ -437,51 +459,72 @@ def index():
     <div class="pageContent">
       <div id="mapContainer" style="width:{{ planeW }}px; height:{{ planeH }}px;"></div>
     </div>
+  {% else %}
+    <p style="margin:20px;">No map_layout.json or no booths found.</p>
+  {% endif %}
 
-    <div class="legend">
-      <div class="legend-item" onclick="alert('Pantry - Space rented by food truck vendors for dry, cold, wet storage. Some have walk in freezers, coolers. Some have offices.')">
+  <!-- Floating button to toggle legend -->
+  <div class="legend-toggle" onclick="toggleLegend()">
+    Legend
+  </div>
+
+  <!-- Overlay that appears when user clicks "Legend" -->
+  <div class="legend-overlay" id="legendOverlay">
+    <div class="legend-box">
+      <div class="close-btn" onclick="toggleLegend()">✕</div>
+      <h2>Map Legend</h2>
+      <div class="legend-item" onclick="alert('Pantry: used for dry/cold/wet storage, sometimes offices.')">
         <div class="color-box" style="background:#84c7ff;"></div>
         <span>Pantry</span>
       </div>
-      <div class="legend-item" onclick="alert('Office Space - Real built out offices near main management offices')">
+      <div class="legend-item" onclick="alert('Office Space: built-out offices near management.')">
         <div class="color-box" style="background:#ffca7a;"></div>
         <span>Office</span>
       </div>
-      <div class="legend-item" onclick="alert('Kitchen - Areas used by food operators to prepare or store food.')">
+      <div class="legend-item" onclick="alert('Kitchen: used by food operators to prepare/store food.')">
         <div class="color-box" style="background:#72f0d5;"></div>
         <span>Kitchen</span>
       </div>
-      <div class="legend-item" onclick="alert('Vacant - This booth is currently unoccupied or empty.')">
+      <div class="legend-item" onclick="alert('Vacant: unoccupied or empty booth.')">
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <!-- Past Due: red border with a small red X, no fill -->
-      <div class="legend-item" onclick="alert('Vendors with past due have a red border.')">
+      <div class="legend-item" onclick="alert('Past Due: vendor has a red border on the map.')">
         <div class="color-box" style="background:transparent; border:2px solid #dc3545;">
-          <span style="color:#dc3545; font-size:16px; font-weight:300;">✖</span>
+          <!-- Force red X with a fallback font -->
+          <span class="x-icon">&#10006;</span>
         </div>
         <span>Past Due</span>
       </div>
-      <div class="legend-item" onclick="alert('Flea Market Vendor - Occupant is fully paid up, normal flea market vendor booth occupant.')">
+      <div class="legend-item" onclick="alert('Flea Market Vendor: occupant is fully paid, normal booth occupant.')">
         <div class="color-box" style="background:#8ae89f;"></div>
         <span>Flea Market Vendor</span>
       </div>
-      <div class="legend-item" onclick="alert('Company Storage - Space used as company storage to store operation items like stages and other misc equipment')">
+      <div class="legend-item" onclick="alert('Company Storage: used by the property to store equipment.')">
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
       </div>
 
-      <div class="legend-item legend-info">
+      <!-- Occupancy & Rent Collection stats -->
+      <div class="legend-stats">
         <span>Occupancy: {{ occupancy_pct }}%</span>
         <span>Rent Collection: {{ rent_collection_pct }}%</span>
       </div>
     </div>
+  </div>
 
-    <script>
+  <script>
+    // Toggle the overlay on/off
+    function toggleLegend() {
+      const overlay = document.getElementById('legendOverlay');
+      overlay.classList.toggle('active');
+    }
+
     function initMap() {
       let planeWidth  = {{ planeW }};
       let planeHeight = {{ planeH }};
       const ctn = document.getElementById("mapContainer");
+      if(!ctn) return; // if no booths or no container
 
       ctn.style.width  = planeWidth + "px";
       ctn.style.height = planeHeight + "px";
@@ -507,7 +550,7 @@ def index():
           div.style.color  = "#000";
         }
 
-        let occList = b.occupants || [];
+        const occList = b.occupants || [];
         if (occList.length > 0) {
           let info = occList.map(o => {
             return (
@@ -529,7 +572,7 @@ def index():
         ctn.appendChild(div);
       });
 
-      // For narrow screens, scale down the map
+      // For narrow screens => scale down the map
       let containerParent = ctn.parentNode;
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
@@ -538,11 +581,9 @@ def index():
         ctn.style.transform       = "scale(" + scale + ")";
       }
     }
+
     window.onload = initMap;
-    </script>
-  {% else %}
-    <p style="margin:20px;">No map_layout.json or no booths found.</p>
-  {% endif %}
+  </script>
 </body>
 </html>
     """
@@ -550,19 +591,16 @@ def index():
     from json import dumps
     booth_json_str = dumps(booths)
 
-    # Render with standard Jinja
     rendered = render_template_string(
         html_template,
-        booths=booths,
         planeW=planeW,
         planeH=planeH,
         booth_json=booth_json_str,
+        booths=booths,
         occupancy_pct=occupancy_pct,
         rent_collection_pct=rent_collection_pct
     )
-
     return rendered
-
 
 #
 # -- RUN THE SERVER --
