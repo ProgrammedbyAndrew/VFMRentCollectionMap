@@ -173,6 +173,18 @@ def index():
             b["occupants"] = []
             b["color"]     = "#bdbdbd"  # vacant pastel gray
 
+    # -------------------
+    # ADD: Occupancy & Rent Collection
+    # -------------------
+    total_spots = len(booths)
+    occupied_spots = sum(1 for b in booths if len(b["occupants"]) > 0)
+    occupancy_pct = round((occupied_spots / total_spots * 100), 1) if total_spots else 0
+
+    occupant_count = sum(len(b["occupants"]) for b in booths)
+    occupant_on_time = sum(len([occ for occ in b["occupants"] if occ["balance"] <= 0]) for b in booths)
+    rent_collection_pct = round((occupant_on_time / occupant_count * 100), 1) if occupant_count else 0
+    # -------------------
+
     # 4) Final HTML
     html_template = """
 <!DOCTYPE html>
@@ -239,6 +251,23 @@ def index():
       color: #000;
       cursor: pointer;
     }
+    /* Added to show Occupancy & Rent Collection in the legend */
+    .legend-info {
+      cursor: default;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    /* Style the "World Food Trucks" button in red with white text */
+    button {
+      background: #dc3545; /* red */
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -285,6 +314,11 @@ def index():
       <div class="legend-item" onclick="alert('Company Storage - Space used as company storage to store operation items like stages and other misc equipment')">
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
+      </div>
+      <!-- ADDED: Occupancy & Rent Collection -->
+      <div class="legend-item legend-info">
+        <strong>Occupancy:</strong> (( occupancy_pct ))% 
+        <strong>Rent Collection:</strong> (( rent_collection_pct ))%
       </div>
     </div>
 
@@ -352,7 +386,13 @@ def index():
     from json import dumps
     booth_json_str = dumps(booths)
 
-    rendered = render_template_string(html_template, booths=booths)
+    # Pass new occupancy & rent collection values into the template
+    rendered = render_template_string(
+        html_template,
+        booths=booths,
+        occupancy_pct=occupancy_pct,
+        rent_collection_pct=rent_collection_pct
+    )
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
     rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
