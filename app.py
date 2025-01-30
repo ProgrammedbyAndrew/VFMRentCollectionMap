@@ -149,7 +149,6 @@ def index():
         if loc_str and loc_str != "N/A":
             for t in loc_str.split():
                 pfx, booth_lbl = parse_token(t)
-                # Force uppercase & strip
                 booth_key = booth_lbl.upper().strip()
                 occupant_map.setdefault(booth_key, []).append({
                     "occupant_name": occupant_name,
@@ -169,12 +168,14 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
-            # NEW CODE: If occupant is past due, revert fill color to prefix-based
-            # and set a 'past_due' flag for a red border in the front-end
+            # If occupant is past due, revert fill color to prefix-based
+            # and set 'past_due' flag for a red border in the front-end
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
-                has_company_storage = any("company storage" in o["occupant_name"].lower() 
-                                          for o in occupant_list)
+                has_company_storage = any(
+                    "company storage" in o["occupant_name"].lower()
+                    for o in occupant_list
+                )
                 if has_company_storage:
                     b["color"] = "#bca4ff"
                 else:
@@ -210,8 +211,13 @@ def index():
     occupancy_pct = round((occupied_spots / total_spots * 100), 1) if total_spots else 0
 
     occupant_count = sum(len(b["occupants"]) for b in booths)
-    occupant_on_time = sum(len([occ for occ in b["occupants"] if occ["balance"] <= 0]) for b in booths)
-    rent_collection_pct = round((occupant_on_time / occupant_count * 100), 1) if occupant_count else 0
+    occupant_on_time = sum(
+        len([occ for occ in b["occupants"] if occ["balance"] <= 0])
+        for b in booths
+    )
+    rent_collection_pct = round(
+        (occupant_on_time / occupant_count * 100), 1
+    ) if occupant_count else 0
 
     # 4) Final HTML
     html_template = """
@@ -330,9 +336,9 @@ def index():
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <!-- Past Due now uses same thickness/style as black line, but in red -->
-      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Booth shows a red border.')">
-        <div class="color-box" style="background:#ff8a8a; border:2px solid #dc3545;"></div>
+      <!-- Past Due: just a red border, no fill -->
+      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Booth will show a red border, no fill.')">
+        <div class="color-box" style="background:transparent; border:2px solid #dc3545;"></div>
         <span>Past Due</span>
       </div>
       <div class="legend-item" onclick="alert('On Time $0 - Occupant is fully paid up.')">
@@ -371,7 +377,7 @@ def index():
         div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
 
-        // If past due, use the same border style but in red
+        // If past due, border is red, same thickness as default
         if (b.past_due) {
           div.style.border = "2px solid #dc3545";
         } else {
@@ -421,7 +427,6 @@ def index():
     from json import dumps
     booth_json_str = dumps(booths)
 
-    # Pass new occupancy & rent collection values into the template
     rendered = render_template_string(
         html_template,
         booths=booths,
@@ -430,7 +435,7 @@ def index():
     )
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
-    rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
+    rendered = rendered.replace("__BOOTH_JSON__", dumps(booths))
 
     return rendered
 
