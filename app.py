@@ -80,7 +80,7 @@ def occupantColor(occupant_list):
          P => #84c7ff        (Pantry)
          K => #72f0d5        (Kitchen)
          OF => #ffca7a       (Office)
-      4) Else => #8ae89f     (On Time)
+      4) Otherwise => #8ae89f (On Time)
     """
     total_bal = sum(o["balance"] for o in occupant_list)
     if total_bal > 0:
@@ -110,7 +110,6 @@ def occupantColor(occupant_list):
     if "OF" in prefix_set:
         return "#ffca7a"
 
-    # Otherwise => On Time
     return "#8ae89f"
 
 @app.route("/")
@@ -170,11 +169,12 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
-            # NEW CODE: Retain the "original" color but add a more elegant red outline for past due
+            # NEW CODE: If occupant is past due, revert fill color to prefix-based
+            # and set a 'past_due' flag for a red border in the front-end
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
-                # Revert to prefix-based color (ignore occupantColor's red fill)
-                has_company_storage = any("company storage" in o["occupant_name"].lower() for o in occupant_list)
+                has_company_storage = any("company storage" in o["occupant_name"].lower() 
+                                          for o in occupant_list)
                 if has_company_storage:
                     b["color"] = "#bca4ff"
                 else:
@@ -195,8 +195,8 @@ def index():
                         b["color"] = "#ffca7a"
                     else:
                         b["color"] = "#8ae89f"
+
                 b["past_due"] = True
-            # END NEW CODE
 
         else:
             b["occupants"] = []
@@ -212,7 +212,6 @@ def index():
     occupant_count = sum(len(b["occupants"]) for b in booths)
     occupant_on_time = sum(len([occ for occ in b["occupants"] if occ["balance"] <= 0]) for b in booths)
     rent_collection_pct = round((occupant_on_time / occupant_count * 100), 1) if occupant_count else 0
-    # -------------------
 
     # 4) Final HTML
     html_template = """
@@ -280,7 +279,6 @@ def index():
       color: #000;
       cursor: pointer;
     }
-    /* Updated styling to make Occupancy & Rent Collection appear side by side */
     .legend-info {
       cursor: default;
       display: flex;
@@ -289,7 +287,6 @@ def index():
       gap: 10px;
       font-weight: bold;
     }
-    /* Style the "World Food Trucks" button in red with white text */
     button {
       background: #dc3545; /* red */
       color: #fff;
@@ -333,10 +330,9 @@ def index():
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <!-- UPDATE: Reflect the new red outline approach for Past Due -->
-      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments (shown with a dashed red outline).')">
-        <!-- Keep the color-box background #ff8a8a, plus show the red outline example -->
-        <div class="color-box" style="background:#ff8a8a; border:3px dashed #c9302c;"></div>
+      <!-- Past Due now uses same thickness/style as black line, but in red -->
+      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Booth shows a red border.')">
+        <div class="color-box" style="background:#ff8a8a; border:2px solid #dc3545;"></div>
         <span>Past Due</span>
       </div>
       <div class="legend-item" onclick="alert('On Time $0 - Occupant is fully paid up.')">
@@ -348,7 +344,6 @@ def index():
         <span>Company Storage</span>
       </div>
 
-      <!-- ADDED: Occupancy & Rent Collection side by side -->
       <div class="legend-item legend-info">
         <span>Occupancy: (( occupancy_pct ))%</span>
         <span>Rent Collection: (( rent_collection_pct ))%</span>
@@ -376,9 +371,9 @@ def index():
         div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
 
-        // More elegant dashed red outline if past due:
+        // If past due, use the same border style but in red
         if (b.past_due) {
-          div.style.border = "3px dashed #c9302c";
+          div.style.border = "2px solid #dc3545";
         } else {
           div.style.border = "2px solid #111";
         }
