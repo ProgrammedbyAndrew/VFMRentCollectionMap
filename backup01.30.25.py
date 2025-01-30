@@ -169,35 +169,6 @@ def index():
         if occupant_list:
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
-
-            # NEW CODE ADDED BELOW - Force original color logic & mark for red outline if past due
-            total_bal = sum(o["balance"] for o in occupant_list)
-            if total_bal > 0:
-                # revert to prefix-based color if occupantColor assigned #ff8a8a
-                has_company_storage = any("company storage" in o["occupant_name"].lower() for o in occupant_list)
-                if has_company_storage:
-                    b["color"] = "#bca4ff"
-                else:
-                    prefix_set = set()
-                    for occ in occupant_list:
-                        loc_str = occ.get("location", "").strip()
-                        for t in loc_str.split():
-                            pfx, _ = parse_token(t)
-                            if pfx:
-                                prefix_set.add(pfx)
-                    if "S" in prefix_set:
-                        b["color"] = "#a7aae6"
-                    elif "P" in prefix_set:
-                        b["color"] = "#84c7ff"
-                    elif "K" in prefix_set:
-                        b["color"] = "#72f0d5"
-                    elif "OF" in prefix_set:
-                        b["color"] = "#ffca7a"
-                    else:
-                        b["color"] = "#8ae89f"
-                b["past_due"] = True
-            # END NEW CODE
-
         else:
             b["occupants"] = []
             b["color"]     = "#bdbdbd"  # vacant pastel gray
@@ -373,15 +344,7 @@ def index():
         div.style.height = b.height + "px";
 
         div.textContent = b.label;
-        div.style.backgroundColor = b.color || "#bdbdbd";
-
-        // NEW CODE: If flagged as past due, give a bold red outline
-        if (b.past_due) {
-          div.style.border = "4px solid red";
-        } else {
-          div.style.border = "2px solid #111";
-        }
-        // END NEW CODE
+        div.style.backgroundColor = b.color || "#bdbdbd"; 
 
         let occList = b.occupants || [];
         if (occList.length > 0) {
