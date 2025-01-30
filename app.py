@@ -126,6 +126,11 @@ login_page_html = """
 #
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """
+    Displays a modern styled login form. On POST, checks credentials;
+    if correct, sets session['logged_in'] and redirects to index.
+    Otherwise, shows an error message.
+    """
     if request.method == "POST":
         form_user = request.form.get("username", "")
         form_pass = request.form.get("password", "")
@@ -138,7 +143,7 @@ def login():
                 login_page_html,
                 error_message="Invalid credentials. Please try again."
             )
-    # GET => show the blank form
+    # For GET => show the blank form
     return render_template_string(login_page_html, error_message=None)
 
 #
@@ -156,6 +161,14 @@ def login_required(f):
 # -- HELPER FUNCTIONS FOR YOUR MAP/BOOTH LOGIC --
 #
 def parse_token(token):
+    """
+    If token starts with 'S' or 'P', strip that letter => numeric booth label.
+      e.g. 'S24' => prefix 'S', booth '24'
+           'P10' => prefix 'P', booth '10'
+    If token starts with 'K' or 'OF', keep entire token => lettered booth
+      e.g. 'K3' => prefix 'K', booth 'K3'
+    Otherwise => no prefix => raw token as booth label.
+    """
     up = token.upper().strip()
     if up.startswith("S"):
         return ("S", up[1:])
@@ -168,6 +181,17 @@ def parse_token(token):
     return ("", up)
 
 def occupantColor(occupant_list):
+    """
+    Slightly darker pastel color logic:
+      1) If total_bal > 0 => Past Due => #ff8a8a
+      2) If occupant_name has 'company storage' => #bca4ff
+      3) Else prefix-based:
+         S => #a7aae6
+         P => #84c7ff
+         K => #72f0d5
+         OF => #ffca7a
+      4) Otherwise => #8ae89f
+    """
     total_bal = sum(o["balance"] for o in occupant_list)
     if total_bal > 0:
         return "#ff8a8a"  # Past due
@@ -180,13 +204,12 @@ def occupantColor(occupant_list):
     # Check prefix
     prefix_set = set()
     for occ in occupant_list:
-        loc_str = occ.get("location", "").strip()
+        loc_str = occ.get("location","").strip()
         for t in loc_str.split():
             pfx, _ = parse_token(t)
             if pfx:
                 prefix_set.add(pfx)
 
-    # Priority S->P->K->OF
     if "S" in prefix_set:
         return "#a7aae6"
     if "P" in prefix_set:
@@ -195,7 +218,6 @@ def occupantColor(occupant_list):
         return "#72f0d5"
     if "OF" in prefix_set:
         return "#ffca7a"
-
     return "#8ae89f"
 
 #
@@ -204,14 +226,14 @@ def occupantColor(occupant_list):
 @app.route("/")
 @login_required
 def index():
-    # 1) Load occupant data
+    # 1) Get occupant data
     all_data = get_leases_data()
     filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
     for row in filtered:
         print(row)
 
-    # 2) Load map_layout.json
+    # 2) load map_layout.json
     try:
         with open("map_layout.json", "r") as f:
             map_data = json.load(f)
@@ -226,7 +248,7 @@ def index():
         planeH = map_data.get("planeHeight", 1000)
         booths = map_data.get("booths", [])
 
-    # occupant_map => { booth_label.upper(): [ occupantData, ... ] }
+    # occupant_map => { booth_label.upper().strip(): [ occupantData, ... ] }
     occupant_map = {}
     for row in filtered:
         occupant_name = row["occupant_name"]
@@ -247,7 +269,7 @@ def index():
                     "location": loc_str
                 })
 
-    # 3) Color-code each booth & check if past due
+    # 3) color-code each booth & check if past due
     for b in booths:
         original_label = (b.get("label","").strip())
         label_up       = original_label.upper().strip()
@@ -257,10 +279,9 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
+            # Past Due => use red border, but fill color from occupantColor logic
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
-                # Past due => red border, text
-                # but fill color is prefix-based or #8ae89f if none
                 has_company_storage = any(
                     "company storage" in o["occupant_name"].lower()
                     for o in occupant_list
@@ -270,11 +291,11 @@ def index():
                 else:
                     prefix_set = set()
                     for occ in occupant_list:
-                        loc_s = occ.get("location","").strip()
-                        for t in loc_s.split():
-                            pfx, _ = parse_token(t)
-                            if pfx:
-                                prefix_set.add(pfx)
+                        loc_str_ = occ.get("location","").strip()
+                        for t_ in loc_str_.split():
+                            pfx_, _ = parse_token(t_)
+                            if pfx_:
+                                prefix_set.add(pfx_)
                     if "S" in prefix_set:
                         b["color"] = "#a7aae6"
                     elif "P" in prefix_set:
@@ -285,13 +306,12 @@ def index():
                         b["color"] = "#ffca7a"
                     else:
                         b["color"] = "#8ae89f"
-
                 b["past_due"] = True
         else:
             b["occupants"] = []
             b["color"]     = "#bdbdbd"  # vacant pastel gray
 
-    # 4) Calculate occupancy & rent collection stats
+    # 4) Occupancy & rent collection
     total_spots = len(booths)
     occupied_spots = sum(1 for b in booths if len(b["occupants"]) > 0)
     occupancy_pct = round((occupied_spots / total_spots * 100), 1) if total_spots else 0
@@ -305,7 +325,7 @@ def index():
         (occupant_on_time / occupant_count * 100), 1
     ) if occupant_count else 0
 
-    # 5) Final HTML with a TOGGLEABLE LEGEND
+    # 5) Final HTML with a nicer bottom legend (no "X" for Past Due)
     html_template = """
 <!DOCTYPE html>
 <html>
@@ -325,7 +345,7 @@ def index():
       margin: 20px 0 10px;
     }
     .pageContent {
-      padding-bottom: 90px;
+      padding-bottom: 90px; /* space for legend */
       margin: 0 20px;
     }
     #mapContainer {
@@ -347,99 +367,64 @@ def index():
       color: #000;
       cursor: pointer;
     }
-    /* If booth is past due, we set border in the JS for each booth, but normal styling above. */
 
-    /* Legend toggle button: bottom-right floating */
-    .legend-toggle {
+    /* Bottom legend, more modern style */
+    .legend {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      background: #dc3545;
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 4px;
-      font-weight: bold;
-      cursor: pointer;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: #f8f9fa; 
+      border-top: 1px solid #ddd;
+      box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+      padding: 10px;
       z-index: 9999;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-    }
-
-    /* Semi-transparent overlay */
-    .legend-overlay {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5);
-      backdrop-filter: blur(3px);
-      display: none; /* hidden by default */
-      z-index: 9998;
+      display: flex;
+      flex-wrap: wrap;      /* allows wrapping on small screens */
       justify-content: center;
       align-items: center;
-      padding: 20px;
-      box-sizing: border-box;
+      gap: 14px;            /* spacing between items */
     }
-    .legend-overlay.active {
-      display: flex;
-    }
-
-    /* White box in the center for legend items */
-    .legend-box {
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      width: 90%;
-      max-width: 400px;
-      color: #000;
-    }
-    .legend-box h2 {
-      margin-top: 0;
-      margin-bottom: 10px;
-    }
-
     .legend-item {
       display: flex;
       align-items: center;
-      margin: 8px 0;
+      font-size: 14px;
       cursor: pointer;
     }
     .color-box {
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       margin-right: 8px;
       border: 2px solid #333;
-      position: relative;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 14px;
-    }
-    .x-icon {
-      color: #dc3545;
-      font-size: 16px;
-      font-weight: 300;
-      font-family: Arial, sans-serif !important; /* Force a non-emoji font */
+      border-radius: 4px; /* slight rounding for modern look */
+      box-sizing: border-box;
     }
 
-    /* A close button for the legend overlay, top-right inside the box */
-    .close-btn {
-      float: right;
-      cursor: pointer;
-      color: #999;
-      font-size: 20px;
-      transition: color 0.3s ease;
-    }
-    .close-btn:hover {
-      color: #333;
+    /* Past Due box: red border, transparent fill (no X) */
+    .past-due-box {
+      background: transparent; 
+      border-color: #dc3545 !important; /* force red border */
     }
 
-    /* Legend stats row */
-    .legend-stats {
-      margin-top: 20px;
+    .legend-info {
       font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-left: 8px;
     }
-    .legend-stats span {
-      display: inline-block;
-      margin-right: 15px;
+    .legend-info span {
+      white-space: nowrap; /* keep the percentages in a single line */
+    }
+    button {
+      background: #dc3545; /* red */
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      margin: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -449,9 +434,7 @@ def index():
 
   <div style="text-align:center; margin-bottom:10px;">
     <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
-      <button style="background:#dc3545; color:#fff; border:none; padding:8px 16px; margin:5px; border-radius:4px; cursor:pointer; font-size:14px;">
-        World Food Trucks
-      </button>
+      <button>World Food Trucks</button>
     </a>
   </div>
 
@@ -463,73 +446,55 @@ def index():
     <p style="margin:20px;">No map_layout.json or no booths found.</p>
   {% endif %}
 
-  <!-- Floating button to toggle legend -->
-  <div class="legend-toggle" onclick="toggleLegend()">
-    Legend
-  </div>
-
-  <!-- Overlay that appears when user clicks "Legend" -->
-  <div class="legend-overlay" id="legendOverlay">
-    <div class="legend-box">
-      <div class="close-btn" onclick="toggleLegend()">✕</div>
-      <h2>Map Legend</h2>
-      <div class="legend-item" onclick="alert('Pantry: used for dry/cold/wet storage, sometimes offices.')">
-        <div class="color-box" style="background:#84c7ff;"></div>
-        <span>Pantry</span>
-      </div>
-      <div class="legend-item" onclick="alert('Office Space: built-out offices near management.')">
-        <div class="color-box" style="background:#ffca7a;"></div>
-        <span>Office</span>
-      </div>
-      <div class="legend-item" onclick="alert('Kitchen: used by food operators to prepare/store food.')">
-        <div class="color-box" style="background:#72f0d5;"></div>
-        <span>Kitchen</span>
-      </div>
-      <div class="legend-item" onclick="alert('Vacant: unoccupied or empty booth.')">
-        <div class="color-box" style="background:#bdbdbd;"></div>
-        <span>Vacant</span>
-      </div>
-      <div class="legend-item" onclick="alert('Past Due: vendor has a red border on the map.')">
-        <div class="color-box" style="background:transparent; border:2px solid #dc3545;">
-          <!-- Force red X with a fallback font -->
-          <span class="x-icon">&#10006;</span>
-        </div>
-        <span>Past Due</span>
-      </div>
-      <div class="legend-item" onclick="alert('Flea Market Vendor: occupant is fully paid, normal booth occupant.')">
-        <div class="color-box" style="background:#8ae89f;"></div>
-        <span>Flea Market Vendor</span>
-      </div>
-      <div class="legend-item" onclick="alert('Company Storage: used by the property to store equipment.')">
-        <div class="color-box" style="background:#bca4ff;"></div>
-        <span>Company Storage</span>
-      </div>
-
-      <!-- Occupancy & Rent Collection stats -->
-      <div class="legend-stats">
-        <span>Occupancy: {{ occupancy_pct }}%</span>
-        <span>Rent Collection: {{ rent_collection_pct }}%</span>
-      </div>
+  <!-- Modernized legend at bottom -->
+  <div class="legend">
+    <div class="legend-item" onclick="alert('Pantry: used for storage and sometimes offices.')">
+      <div class="color-box" style="background:#84c7ff;"></div>
+      <span>Pantry</span>
+    </div>
+    <div class="legend-item" onclick="alert('Office: built-out offices near management.')">
+      <div class="color-box" style="background:#ffca7a;"></div>
+      <span>Office</span>
+    </div>
+    <div class="legend-item" onclick="alert('Kitchen: used by food operators.')">
+      <div class="color-box" style="background:#72f0d5;"></div>
+      <span>Kitchen</span>
+    </div>
+    <div class="legend-item" onclick="alert('Vacant: unoccupied booth.')">
+      <div class="color-box" style="background:#bdbdbd;"></div>
+      <span>Vacant</span>
+    </div>
+    <!-- Past Due => no X, just a red border on transparent fill -->
+    <div class="legend-item" onclick="alert('Past Due: vendor has red border on map.')">
+      <div class="color-box past-due-box"></div>
+      <span>Past Due</span>
+    </div>
+    <div class="legend-item" onclick="alert('Flea Market Vendor: occupant is fully paid.')">
+      <div class="color-box" style="background:#8ae89f;"></div>
+      <span>Flea Market Vendor</span>
+    </div>
+    <div class="legend-item" onclick="alert('Company Storage: used to store equipment.')">
+      <div class="color-box" style="background:#bca4ff;"></div>
+      <span>Company Storage</span>
+    </div>
+    <!-- Occupancy & Rent Collection -->
+    <div class="legend-item legend-info">
+      <span>Occupancy: {{ occupancy_pct }}%</span>
+      <span>Rent: {{ rent_collection_pct }}%</span>
     </div>
   </div>
 
   <script>
-    // Toggle the overlay on/off
-    function toggleLegend() {
-      const overlay = document.getElementById('legendOverlay');
-      overlay.classList.toggle('active');
-    }
-
     function initMap() {
       let planeWidth  = {{ planeW }};
       let planeHeight = {{ planeH }};
       const ctn = document.getElementById("mapContainer");
-      if(!ctn) return; // if no booths or no container
+      if(!ctn) return; // if there's no mapContainer or no booths
 
       ctn.style.width  = planeWidth + "px";
       ctn.style.height = planeHeight + "px";
 
-      const data = {{ booth_json|safe }};
+      const data = {{ booths|tojson }};
       data.forEach(b => {
         const div = document.createElement("div");
         div.className = "booth";
@@ -550,7 +515,7 @@ def index():
           div.style.color  = "#000";
         }
 
-        const occList = b.occupants || [];
+        let occList = b.occupants || [];
         if (occList.length > 0) {
           let info = occList.map(o => {
             return (
@@ -572,7 +537,7 @@ def index():
         ctn.appendChild(div);
       });
 
-      // For narrow screens => scale down the map
+      // For narrow screens => scale down
       let containerParent = ctn.parentNode;
       let actualWidth = containerParent.clientWidth;
       if (planeWidth > 0 && actualWidth < planeWidth) {
@@ -581,22 +546,19 @@ def index():
         ctn.style.transform       = "scale(" + scale + ")";
       }
     }
-
     window.onload = initMap;
   </script>
 </body>
 </html>
     """
 
+    # Convert 'booths' to JSON so we can use in JS
     from json import dumps
-    booth_json_str = dumps(booths)
-
     rendered = render_template_string(
         html_template,
+        booths=booths,
         planeW=planeW,
         planeH=planeH,
-        booth_json=booth_json_str,
-        booths=booths,
         occupancy_pct=occupancy_pct,
         rent_collection_pct=rent_collection_pct
     )
