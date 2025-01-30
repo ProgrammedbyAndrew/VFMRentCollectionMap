@@ -3,10 +3,12 @@
 import os
 import json
 from functools import wraps
-from flask import Flask, render_template_string, request, Response
+from flask import Flask, render_template_string, request, redirect, url_for, session
 from occupant_service import get_leases_data
 
 app = Flask(__name__)
+# IMPORTANT: Change this to a strong, random value in production
+app.secret_key = "c7aebdfef4b2cf300ceafc1231f683b3404a4f59799af4278b7da3deef8ef53a"
 
 # Keep your custom Jinja delimiters
 app.jinja_options = {
@@ -21,34 +23,89 @@ app.jinja_options = {
 USERNAME = "Visitors Plaza"
 PASSWORD = "11qq22ww"
 
-def check_auth(username, password):
+#
+# Custom login page route
+#
+@app.route("/login", methods=["GET", "POST"])
+def login():
     """
-    Check if a username and password combination is valid.
+    Renders a custom HTML form for username/password.
+    If valid credentials, sets session['logged_in'] = True and redirects to '/'
     """
-    return username == USERNAME and password == PASSWORD
+    if request.method == "POST":
+        form_user = request.form.get("username", "")
+        form_pass = request.form.get("password", "")
+        if form_user == USERNAME and form_pass == PASSWORD:
+            session["logged_in"] = True
+            return redirect(url_for("index"))
+        else:
+            # Invalid credentials => show an error and re-render the form
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Sign into Visitors Plaza Rent Collection Map</title>
+            </head>
+            <body>
+              <h2>Sign into Visitors Plaza Rent Collection Map</h2>
+              <p style="color:red;">Invalid credentials, please try again.</p>
+              <form method="POST">
+                <div>
+                  <label for="username">Username:</label>
+                  <input name="username" id="username" autofocus />
+                </div>
+                <br>
+                <div>
+                  <label for="password">Password:</label>
+                  <input type="password" name="password" id="password" />
+                </div>
+                <br>
+                <button type="submit">Log In</button>
+              </form>
+            </body>
+            </html>
+            """)
+    else:
+        # If GET request, just show the blank form
+        return render_template_string("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Sign into Visitors Plaza Rent Collection Map</title>
+        </head>
+        <body>
+          <h2>Sign into Visitors Plaza Rent Collection Map</h2>
+          <form method="POST">
+            <div>
+              <label for="username">Username:</label>
+              <input name="username" id="username" autofocus />
+            </div>
+            <br>
+            <div>
+              <label for="password">Password:</label>
+              <input type="password" name="password" id="password" />
+            </div>
+            <br>
+            <button type="submit">Log In</button>
+          </form>
+        </body>
+        </html>
+        """)
 
-def authenticate():
-    """
-    Sends a 401 response that enables basic auth.
-    """
-    return Response(
-        'Please provide valid credentials.\n',
-        401,
-        {'WWW-Authenticate': 'Basic realm="Sign into Visitors Plaza Rent Collection Map"'}
-    )
-
-def requires_auth(f):
-    """
-    Decorator to prompt for username/password and check them.
-    """
+#
+# Simple decorator to require login via session
+#
+def login_required(f):
     @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
+    def wrapper(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
         return f(*args, **kwargs)
-    return decorated
+    return wrapper
 
+#
+# Helper function to parse tokens from occupant location text
+#
 def parse_token(token):
     """
     If token starts with 'S' or 'P', strip that letter => numeric booth label.
@@ -70,6 +127,9 @@ def parse_token(token):
         return ("OF", up) # e.g. 'OF2'
     return ("", up)
 
+#
+# Helper function to set occupant color based on occupant data
+#
 def occupantColor(occupant_list):
     """
     Slightly darker pastel color logic:
@@ -112,11 +172,14 @@ def occupantColor(occupant_list):
 
     return "#8ae89f"
 
+#
+# Main index route showing the map, protected by login
+#
 @app.route("/")
-@requires_auth
+@login_required
 def index():
     # 1) occupant data
-    all_data = get_leases_data()
+    all_data = get_leases_data()  # from occupant_service
     filtered = [r for r in all_data if r["property_name"] == "Visitors Flea Market"]
     print("\n=== VFM occupant data (map only) ===")
     for row in filtered:
@@ -449,5 +512,8 @@ def index():
 
     return rendered
 
+#
+# Finally, run the app
+#
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
