@@ -325,7 +325,7 @@ def index():
         (occupant_on_time / occupant_count * 100), 1
     ) if occupant_count else 0
 
-    # 5) Final HTML with a nicer bottom legend (no "X" for Past Due)
+    # 5) Final HTML with bottom legend
     html_template = """
 <!DOCTYPE html>
 <html>
@@ -426,6 +426,12 @@ def index():
       cursor: pointer;
       font-size: 14px;
     }
+
+    /* Force a line break in the legend so "Past Due" is on second line */
+    .break-line {
+      flex-basis: 100%;
+      height: 0;
+    }
   </style>
 </head>
 <body>
@@ -464,14 +470,19 @@ def index():
       <div class="color-box" style="background:#bdbdbd;"></div>
       <span>Vacant</span>
     </div>
+
+    <!-- Force a break in the flex layout (moves next items to second line) -->
+    <div class="break-line"></div>
+
     <!-- Past Due => no X, just a red border on transparent fill -->
     <div class="legend-item" onclick="alert('Past Due: vendor has red border on map.')">
       <div class="color-box past-due-box"></div>
       <span>Past Due</span>
     </div>
-    <div class="legend-item" onclick="alert('Flea Market Vendor: occupant is fully paid.')">
+    <!-- FM Vendor instead of "Flea Market Vendor" -->
+    <div class="legend-item" onclick="alert('FM Vendor: occupant is fully paid.')">
       <div class="color-box" style="background:#8ae89f;"></div>
-      <span>Flea Market Vendor</span>
+      <span>FM Vendor</span>
     </div>
     <div class="legend-item" onclick="alert('Company Storage: used to store equipment.')">
       <div class="color-box" style="background:#bca4ff;"></div>
@@ -552,7 +563,7 @@ def index():
 </html>
     """
 
-    # Convert 'booths' to JSON so we can use in JS
+    # Convert 'booths' to JSON so we can use it in JS
     from json import dumps
     rendered = render_template_string(
         html_template,
