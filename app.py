@@ -34,7 +34,7 @@ def authenticate():
     return Response(
         'Please provide valid credentials.\n',
         401,
-        {'WWW-Authenticate': 'Basic realm="Visitors Plaza Rent Collection Map"'}
+        {'WWW-Authenticate': 'Basic realm="Sign into Visitors Plaza Rent Collection Map"'}
     )
 
 def requires_auth(f):
