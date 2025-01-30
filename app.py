@@ -170,10 +170,10 @@ def index():
             b["occupants"] = occupant_list
             b["color"]     = occupantColor(occupant_list)
 
-            # NEW CODE ADDED BELOW - Force original color logic & mark for red outline if past due
+            # NEW CODE: Retain the "original" color but add a more elegant red outline for past due
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
-                # revert to prefix-based color if occupantColor assigned #ff8a8a
+                # Revert to prefix-based color (ignore occupantColor's red fill)
                 has_company_storage = any("company storage" in o["occupant_name"].lower() for o in occupant_list)
                 if has_company_storage:
                     b["color"] = "#bca4ff"
@@ -283,10 +283,10 @@ def index():
     /* Updated styling to make Occupancy & Rent Collection appear side by side */
     .legend-info {
       cursor: default;
-      display: flex;       /* ensure it is displayed as a flex container */
-      flex-direction: row; /* row alignment for side-by-side */
+      display: flex;
+      flex-direction: row;
       align-items: center;
-      gap: 10px;           /* space between items */
+      gap: 10px;
       font-weight: bold;
     }
     /* Style the "World Food Trucks" button in red with white text */
@@ -305,13 +305,11 @@ def index():
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <!-- UPDATED: REMOVED target="_blank" -->
   <div style="text-align:center; margin-bottom:10px;">
     <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
       <button>World Food Trucks</button>
     </a>
   </div>
-  <!-- END UPDATED BUTTON -->
 
   (% if booths|length > 0 %)
     <div class="pageContent">
@@ -335,8 +333,10 @@ def index():
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments.')">
-        <div class="color-box" style="background:#ff8a8a;"></div>
+      <!-- UPDATE: Reflect the new red outline approach for Past Due -->
+      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments (shown with a dashed red outline).')">
+        <!-- Keep the color-box background #ff8a8a, plus show the red outline example -->
+        <div class="color-box" style="background:#ff8a8a; border:3px dashed #c9302c;"></div>
         <span>Past Due</span>
       </div>
       <div class="legend-item" onclick="alert('On Time $0 - Occupant is fully paid up.')">
@@ -347,6 +347,7 @@ def index():
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
       </div>
+
       <!-- ADDED: Occupancy & Rent Collection side by side -->
       <div class="legend-item legend-info">
         <span>Occupancy: (( occupancy_pct ))%</span>
@@ -375,13 +376,12 @@ def index():
         div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
 
-        // NEW CODE: If flagged as past due, give a bold red outline
+        // More elegant dashed red outline if past due:
         if (b.past_due) {
-          div.style.border = "4px solid red";
+          div.style.border = "3px dashed #c9302c";
         } else {
           div.style.border = "2px solid #111";
         }
-        // END NEW CODE
 
         let occList = b.occupants || [];
         if (occList.length > 0) {
