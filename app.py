@@ -342,9 +342,9 @@ def index():
         <span>Vacant</span>
       </div>
       <!-- Past Due: red border with a small red X, no fill -->
-      <div class="legend-item" onclick="alert('Vendors with past due have a red number & border.')">
+      <div class="legend-item" onclick="alert('Vendors with past due have a red border.')">
         <div class="color-box" style="background:transparent; border:2px solid #dc3545;">
-          <span style="color:#dc3545;">✖</span>
+          <span style="color:#dc3545; font-size:16px; font-weight:300;">✖</span>
         </div>
         <span>Past Due</span>
       </div>
