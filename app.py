@@ -34,7 +34,7 @@ def authenticate():
     return Response(
         'Please provide valid credentials.\n',
         401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+        {'WWW-Authenticate': 'Basic realm="Visitors Plaza Rent Collection Map"'}
     )
 
 def requires_auth(f):
@@ -65,9 +65,9 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)
+        return ("K", up)  # e.g. 'K3'
     if up.startswith("OF"):
-        return ("OF", up)
+        return ("OF", up) # e.g. 'OF2'
     return ("", up)
 
 def occupantColor(occupant_list):
@@ -94,7 +94,7 @@ def occupantColor(occupant_list):
     # Check prefix
     prefix_set = set()
     for occ in occupant_list:
-        loc_str = occ.get("location", "").strip()
+        loc_str = occ.get("location","").strip()
         for t in loc_str.split():
             pfx, _ = parse_token(t)
             if pfx:
@@ -265,6 +265,11 @@ def index():
       height: 20px;
       margin-right: 6px;
       border: 2px solid #333;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 14px;
     }
     #mapContainer {
       display: block;
@@ -336,9 +341,11 @@ def index():
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <!-- Past Due: just a red border, no fill, indicates occupant owes rent -->
-      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Red border, empty fill.')">
-        <div class="color-box" style="background:transparent; border:2px solid #dc3545;"></div>
+      <!-- Past Due: red border with a small red X, no fill -->
+      <div class="legend-item" onclick="alert('Vendors with past due have a red border.')">
+        <div class="color-box" style="background:transparent; border:2px solid #dc3545;">
+          <span style="color:#dc3545;">✖</span>
+        </div>
         <span>Past Due</span>
       </div>
       <!-- Changed label from 'On Time $0' to 'Flea Market Vendor' -->
