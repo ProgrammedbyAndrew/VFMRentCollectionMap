@@ -13,21 +13,22 @@ app = Flask(__name__)
 # IMPORTANT: Change this to a strong, random value in production
 app.secret_key = "c7aebdfef4b2cf300ceafc1231f683b3404a4f59799af4278b7da3deef8ef53a"
 
-# Keep your custom Jinja delimiters if desired
-app.jinja_options = {
-    'block_start_string': '(%',
-    'block_end_string': '%)',
-    'variable_start_string': '((',
-    'variable_end_string': '))',
-    'comment_start_string': '(#',
-    'comment_end_string': '#)'
-}
+# -- We remove the custom jinja_options so that
+# -- Jinja uses the default {{ }} and {% %} syntax.
+# app.jinja_options = {
+#    'block_start_string': '(%',
+#    'block_end_string': '%)',
+#    'variable_start_string': '((',
+#    'variable_end_string': '))',
+#    'comment_start_string': '(#',
+#    'comment_end_string': '#)'
+# }
 
 USERNAME = "Visitors Plaza"
 PASSWORD = "11qq22ww"
 
 #
-# -- MODERN, STYLED LOGIN PAGE (BLACK BACKGROUND) --
+# -- MODERN, STYLED LOGIN PAGE (Black Background, uses {{...}}) --
 #
 login_page_html = """
 <!DOCTYPE html>
@@ -41,8 +42,7 @@ login_page_html = """
       margin: 0;
       padding: 0;
       font-family: 'Roboto', sans-serif;
-      /* Black background */
-      background: #000;
+      background: #000; /* Black background */
       color: #fff;
     }
     .login-container {
@@ -174,10 +174,8 @@ def login_required(f):
 def parse_token(token):
     """
     If token starts with 'S' or 'P', strip that letter => numeric booth label.
-      e.g. 'S24' => ('S','24'), 'P10' => ('P','10')
-    If token starts with 'K' or 'OF', keep entire token => lettered booth
-      e.g. 'K1' => ('K','K1'), 'OF2' => ('OF','OF2')
-    Otherwise => ('', up)
+    If token starts with 'K' or 'OF', keep entire token => lettered booth.
+    Otherwise => raw token as booth label.
     """
     up = token.upper().strip()
     if up.startswith("S"):
@@ -193,14 +191,11 @@ def parse_token(token):
 def occupantColor(occupant_list):
     """
     Slightly darker pastel color logic:
-      1) If total_bal > 0 => Past Due => #ff8a8a
-      2) If occupant_name has 'company storage' => #bca4ff
+      1) total_bal > 0 => Past Due (#ff8a8a)
+      2) occupant_name has 'company storage' => #bca4ff
       3) Else prefix-based:
-         S => #a7aae6 (Storage)
-         P => #84c7ff (Pantry)
-         K => #72f0d5 (Kitchen)
-         OF => #ffca7a (Office)
-      4) Otherwise => #8ae89f (On Time)
+         S => #a7aae6, P => #84c7ff, K => #72f0d5, OF => #ffca7a
+      4) Otherwise => #8ae89f
     """
     total_bal = sum(o["balance"] for o in occupant_list)
     if total_bal > 0:
@@ -209,7 +204,7 @@ def occupantColor(occupant_list):
     has_company_storage = any("company storage" in o["occupant_name"].lower()
                               for o in occupant_list)
     if has_company_storage:
-        return "#bca4ff"  # Company Storage => pastel purple
+        return "#bca4ff"
 
     # Check prefix
     prefix_set = set()
@@ -338,7 +333,7 @@ def index():
         (occupant_on_time / occupant_count * 100), 1
     ) if occupant_count else 0
 
-    # 5) Final HTML for the map
+    # 5) Final HTML for the map (using default {% ... %} and {{ ... }})
     html_template = """
 <!DOCTYPE html>
 <html>
@@ -438,9 +433,9 @@ def index():
     </a>
   </div>
 
-  (% if booths|length > 0 %)
+  {% if booths|length > 0 %}
     <div class="pageContent">
-      <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+      <div id="mapContainer" style="width:{{ planeW }}px; height:{{ planeH }}px;"></div>
     </div>
 
     <div class="legend">
@@ -467,7 +462,6 @@ def index():
         </div>
         <span>Past Due</span>
       </div>
-      <!-- Changed label from 'On Time $0' to 'Flea Market Vendor' -->
       <div class="legend-item" onclick="alert('Flea Market Vendor - Occupant is fully paid up, normal flea market vendor booth occupant.')">
         <div class="color-box" style="background:#8ae89f;"></div>
         <span>Flea Market Vendor</span>
@@ -478,21 +472,21 @@ def index():
       </div>
 
       <div class="legend-item legend-info">
-        <span>Occupancy: (( occupancy_pct ))%</span>
-        <span>Rent Collection: (( rent_collection_pct ))%</span>
+        <span>Occupancy: {{ occupancy_pct }}%</span>
+        <span>Rent Collection: {{ rent_collection_pct }}%</span>
       </div>
     </div>
 
     <script>
     function initMap() {
-      let planeWidth  = __PW__;
-      let planeHeight = __PH__;
+      let planeWidth  = {{ planeW }};
+      let planeHeight = {{ planeH }};
       const ctn = document.getElementById("mapContainer");
 
       ctn.style.width  = planeWidth + "px";
       ctn.style.height = planeHeight + "px";
 
-      const data = __BOOTH_JSON__;
+      const data = {{ booth_json|safe }};
       data.forEach(b => {
         const div = document.createElement("div");
         div.className = "booth";
@@ -546,9 +540,9 @@ def index():
     }
     window.onload = initMap;
     </script>
-  (% else %)
+  {% else %}
     <p style="margin:20px;">No map_layout.json or no booths found.</p>
-  (% endif %)
+  {% endif %}
 </body>
 </html>
     """
@@ -556,17 +550,19 @@ def index():
     from json import dumps
     booth_json_str = dumps(booths)
 
+    # Render with standard Jinja
     rendered = render_template_string(
         html_template,
         booths=booths,
+        planeW=planeW,
+        planeH=planeH,
+        booth_json=booth_json_str,
         occupancy_pct=occupancy_pct,
         rent_collection_pct=rent_collection_pct
     )
-    rendered = rendered.replace("__PW__", str(planeW))
-    rendered = rendered.replace("__PH__", str(planeH))
-    rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
+
 
 #
 # -- RUN THE SERVER --
