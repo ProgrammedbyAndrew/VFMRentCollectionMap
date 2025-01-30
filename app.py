@@ -65,9 +65,9 @@ def parse_token(token):
     if up.startswith("P"):
         return ("P", up[1:])
     if up.startswith("K"):
-        return ("K", up)  # e.g. 'K3'
+        return ("K", up)
     if up.startswith("OF"):
-        return ("OF", up) # e.g. 'OF2'
+        return ("OF", up)
     return ("", up)
 
 def occupantColor(occupant_list):
@@ -94,7 +94,7 @@ def occupantColor(occupant_list):
     # Check prefix
     prefix_set = set()
     for occ in occupant_list:
-        loc_str = occ.get("location","").strip()
+        loc_str = occ.get("location", "").strip()
         for t in loc_str.split():
             pfx, _ = parse_token(t)
             if pfx:
@@ -341,9 +341,10 @@ def index():
         <div class="color-box" style="background:transparent; border:2px solid #dc3545;"></div>
         <span>Past Due</span>
       </div>
-      <div class="legend-item" onclick="alert('On Time $0 - Occupant is fully paid up.')">
+      <!-- Changed label from 'On Time $0' to 'Flea Market Vendor' -->
+      <div class="legend-item" onclick="alert('Flea Market Vendor - Occupant is fully paid up, normal flea market vendor booth occupant.')">
         <div class="color-box" style="background:#8ae89f;"></div>
-        <span>On Time $0</span>
+        <span>Flea Market Vendor</span>
       </div>
       <div class="legend-item" onclick="alert('Company Storage - Space used as company storage to store operation items like stages and other misc equipment')">
         <div class="color-box" style="background:#bca4ff;"></div>
@@ -380,10 +381,10 @@ def index():
         // If past due, border is red & text is red
         if (b.past_due) {
           div.style.border = "2px solid #dc3545";
-          div.style.color  = "#dc3545";  // text also red
+          div.style.color  = "#dc3545";
         } else {
           div.style.border = "2px solid #111";
-          div.style.color  = "#000";    // default text color
+          div.style.color  = "#000";
         }
 
         let occList = b.occupants || [];
