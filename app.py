@@ -169,7 +169,7 @@ def index():
             b["color"]     = occupantColor(occupant_list)
 
             # If occupant is past due, revert fill color to prefix-based
-            # and set 'past_due' flag for a red border in the front-end
+            # and set 'past_due' flag for a red border/text in the front-end
             total_bal = sum(o["balance"] for o in occupant_list)
             if total_bal > 0:
                 has_company_storage = any(
@@ -336,8 +336,8 @@ def index():
         <div class="color-box" style="background:#bdbdbd;"></div>
         <span>Vacant</span>
       </div>
-      <!-- Past Due: just a red border, no fill -->
-      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Booth will show a red border, no fill.')">
+      <!-- Past Due: just a red border, no fill, indicates occupant owes rent -->
+      <div class="legend-item" onclick="alert('Past Due - Occupant owes rent; behind on payments. Red border, empty fill.')">
         <div class="color-box" style="background:transparent; border:2px solid #dc3545;"></div>
         <span>Past Due</span>
       </div>
@@ -377,11 +377,13 @@ def index():
         div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
 
-        // If past due, border is red, same thickness as default
+        // If past due, border is red & text is red
         if (b.past_due) {
           div.style.border = "2px solid #dc3545";
+          div.style.color  = "#dc3545";  // text also red
         } else {
           div.style.border = "2px solid #111";
+          div.style.color  = "#000";    // default text color
         }
 
         let occList = b.occupants || [];
@@ -435,7 +437,7 @@ def index():
     )
     rendered = rendered.replace("__PW__", str(planeW))
     rendered = rendered.replace("__PH__", str(planeH))
-    rendered = rendered.replace("__BOOTH_JSON__", dumps(booths))
+    rendered = rendered.replace("__BOOTH_JSON__", booth_json_str)
 
     return rendered
 
