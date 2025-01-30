@@ -251,11 +251,14 @@ def index():
       color: #000;
       cursor: pointer;
     }
-    /* Added to show Occupancy & Rent Collection in the legend */
+    /* Updated styling to make Occupancy & Rent Collection appear side by side */
     .legend-info {
       cursor: default;
-      flex-direction: column;
-      align-items: flex-start;
+      display: flex;       /* ensure it is displayed as a flex container */
+      flex-direction: row; /* row alignment for side-by-side */
+      align-items: center;
+      gap: 10px;           /* space between items */
+      font-weight: bold;
     }
     /* Style the "World Food Trucks" button in red with white text */
     button {
@@ -315,10 +318,10 @@ def index():
         <div class="color-box" style="background:#bca4ff;"></div>
         <span>Company Storage</span>
       </div>
-      <!-- ADDED: Occupancy & Rent Collection -->
+      <!-- ADDED: Occupancy & Rent Collection side by side -->
       <div class="legend-item legend-info">
-        <strong>Occupancy:</strong> (( occupancy_pct ))% 
-        <strong>Rent Collection:</strong> (( rent_collection_pct ))%
+        <span>Occupancy: (( occupancy_pct ))%</span>
+        <span>Rent Collection: (( rent_collection_pct ))%</span>
       </div>
     </div>
 
