@@ -1,13 +1,11 @@
+#!/usr/bin/env python3
+
 import os
 import requests
-from dotenv import load_dotenv
-
-# Load .env so environment variables are available
-load_dotenv()
 
 # Pull from environment variables
-BUILDIUM_CLIENT_ID = os.getenv("BUILDIUM_CLIENT_ID", "FAKE_ID")
-BUILDIUM_CLIENT_SECRET = os.getenv("BUILDIUM_CLIENT_SECRET", "FAKE_SECRET")
+BUILDIUM_CLIENT_ID = os.getenv("BUILDIUM_CLIENT_ID") or raise ValueError("Missing BUILDIUM_CLIENT_ID environment variable")
+BUILDIUM_CLIENT_SECRET = os.getenv("BUILDIUM_CLIENT_SECRET") or raise ValueError("Missing BUILDIUM_CLIENT_SECRET environment variable")
 
 LEASES_URL = "https://api.buildium.com/v1/leases"
 OUTSTANDING_BALANCES_URL = "https://api.buildium.com/v1/leases/outstandingbalances"
@@ -19,7 +17,6 @@ headers = {
     "x-buildium-client-secret": BUILDIUM_CLIENT_SECRET,
     "Content-Type": "application/json"
 }
-
 
 def fetch_all_leases(lease_statuses=("Active",)):
     offset = 0
@@ -44,7 +41,6 @@ def fetch_all_leases(lease_statuses=("Active",)):
 
     return all_leases
 
-
 def fetch_outstanding_balances(lease_statuses=("Active",)):
     offset = 0
     limit = 100
@@ -68,7 +64,6 @@ def fetch_outstanding_balances(lease_statuses=("Active",)):
 
     return all_balances
 
-
 def fetch_all_properties():
     offset = 0
     limit = 100
@@ -91,7 +86,6 @@ def fetch_all_properties():
         offset += limit
 
     return all_props
-
 
 def fetch_all_units():
     offset = 0
