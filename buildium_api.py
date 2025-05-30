@@ -4,8 +4,12 @@ import os
 import requests
 
 # Pull from environment variables
-BUILDIUM_CLIENT_ID = os.getenv("BUILDIUM_CLIENT_ID") or raise ValueError("Missing BUILDIUM_CLIENT_ID environment variable")
-BUILDIUM_CLIENT_SECRET = os.getenv("BUILDIUM_CLIENT_SECRET") or raise ValueError("Missing BUILDIUM_CLIENT_SECRET environment variable")
+BUILDIUM_CLIENT_ID = os.getenv("BUILDIUM_CLIENT_ID")
+BUILDIUM_CLIENT_SECRET = os.getenv("BUILDIUM_CLIENT_SECRET")
+if not BUILDIUM_CLIENT_ID:
+    raise ValueError("Missing BUILDIUM_CLIENT_ID environment variable")
+if not BUILDIUM_CLIENT_SECRET:
+    raise ValueError("Missing BUILDIUM_CLIENT_SECRET environment variable")
 
 LEASES_URL = "https://api.buildium.com/v1/leases"
 OUTSTANDING_BALANCES_URL = "https://api.buildium.com/v1/leases/outstandingbalances"
