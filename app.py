@@ -399,7 +399,13 @@ def index():
       // Counter-rotate labels so they stay upright and readable
       const labels = ctn.querySelectorAll(".booth-label");
       labels.forEach(label => {
-        label.style.transform = isRotated ? "rotate(-90deg)" : "none";
+        if (isRotated) {
+          label.style.transform = "rotate(-90deg)";
+          label.style.fontSize = "9px";
+        } else {
+          label.style.transform = "none";
+          label.style.fontSize = "12px";
+        }
       });
     }
 
