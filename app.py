@@ -198,10 +198,11 @@ def index():
       margin-right: 6px;
       border: 2px solid #333;
     }
-    #mapContainer {
-      display: block;
+    #mapWrapper {
       margin: 0 auto;
-      max-width: 100%;
+      overflow: hidden;
+    }
+    #mapContainer {
       position: relative;
       background: #fff;
     }
@@ -240,28 +241,28 @@ def index():
     button.rotate-btn {
       background: #007bff; /* blue */
     }
-    /* Rotated map state */
-    #mapContainer.rotated {
-      transform-origin: top left;
-    }
-    #mapContainer.rotated .booth {
-      /* Counter-rotate labels so they're readable */
+    .map-controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <div style="text-align:center; margin-bottom:10px;">
-    <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
-      <button>World Food Trucks</button>
-    </a>
-    <button class="rotate-btn" onclick="toggleRotation()">Rotate Map</button>
-  </div>
-
   (% if booths|length > 0 %)
     <div class="pageContent">
-      <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+      <div class="map-controls">
+        <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
+          <button>World Food Trucks</button>
+        </a>
+        <button class="rotate-btn" onclick="toggleRotation()">Rotate Map</button>
+      </div>
+      <div id="mapWrapper">
+        <div id="mapContainer" style="width:__PW__px; height:__PH__px;"></div>
+      </div>
     </div>
 
     <div class="legend">
@@ -319,7 +320,6 @@ def index():
         div.style.top    = b.y + "px";
         div.style.width  = b.width + "px";
         div.style.height = b.height + "px";
-
         div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
 
@@ -350,44 +350,34 @@ def index():
 
     function applyScaling() {
       const ctn = document.getElementById("mapContainer");
-      const containerParent = ctn.parentNode;
-      const actualWidth = containerParent.clientWidth;
+      const wrapper = document.getElementById("mapWrapper");
+      const pageContent = document.querySelector(".pageContent");
+      const availableWidth = pageContent.clientWidth;
 
-      // Determine effective width based on rotation
-      const effectiveWidth = isRotated ? planeHeight : planeWidth;
+      if (isRotated) {
+        // When rotated 90deg, the original height becomes the new width
+        // Scale so the rotated map fills the available width
+        const scale = availableWidth / planeHeight;
 
-      if (effectiveWidth > 0 && actualWidth < effectiveWidth) {
-        const scale = actualWidth / effectiveWidth;
-        if (isRotated) {
-          ctn.style.transformOrigin = "top left";
-          ctn.style.transform = "rotate(90deg) translateY(-100%) scale(" + scale + ")";
-          // Adjust container parent height for rotated layout
-          containerParent.style.height = (planeWidth * scale) + "px";
-        } else {
-          ctn.style.transformOrigin = "top left";
-          ctn.style.transform = "scale(" + scale + ")";
-          containerParent.style.height = (planeHeight * scale) + "px";
-        }
+        // After rotation, visible dimensions are swapped
+        const visibleWidth = planeHeight * scale;
+        const visibleHeight = planeWidth * scale;
+
+        ctn.style.transformOrigin = "top left";
+        ctn.style.transform = "rotate(90deg) translateY(-100%) scale(" + scale + ")";
+
+        wrapper.style.height = visibleHeight + "px";
+        wrapper.style.width = visibleWidth + "px";
       } else {
-        if (isRotated) {
-          ctn.style.transformOrigin = "top left";
-          ctn.style.transform = "rotate(90deg) translateY(-100%)";
-          containerParent.style.height = planeWidth + "px";
-        } else {
-          ctn.style.transform = "none";
-          containerParent.style.height = planeHeight + "px";
-        }
-      }
+        // Portrait mode - scale to fit width
+        const scale = Math.min(1, availableWidth / planeWidth);
 
-      // Counter-rotate booth labels so they stay readable
-      const booths = ctn.querySelectorAll(".booth");
-      booths.forEach(booth => {
-        if (isRotated) {
-          booth.style.transform = "rotate(-90deg)";
-        } else {
-          booth.style.transform = "none";
-        }
-      });
+        ctn.style.transformOrigin = "top left";
+        ctn.style.transform = "scale(" + scale + ")";
+
+        wrapper.style.height = (planeHeight * scale) + "px";
+        wrapper.style.width = (planeWidth * scale) + "px";
+      }
     }
 
     function toggleRotation() {
@@ -396,6 +386,7 @@ def index():
     }
 
     window.onload = initMap;
+    window.onresize = applyScaling;
     </script>
   (% else %)
     <p style="margin:20px;">No map_layout.json or no booths found.</p>
