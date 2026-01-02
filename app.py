@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-import os
 import json
-from functools import wraps
-from flask import Flask, render_template_string, request, Response
+from flask import Flask, render_template_string
 from occupant_service import get_leases_data
 
 app = Flask(__name__)
@@ -17,37 +15,6 @@ app.jinja_options = {
     'comment_start_string': '(#',
     'comment_end_string': '#)'
 }
-
-USERNAME = "Visitors Plaza"
-PASSWORD = "11qq22ww"
-
-def check_auth(username, password):
-    """
-    Check if a username and password combination is valid.
-    """
-    return username == USERNAME and password == PASSWORD
-
-def authenticate():
-    """
-    Sends a 401 response that enables basic auth.
-    """
-    return Response(
-        'Please provide valid credentials.\n',
-        401,
-        {'WWW-Authenticate': 'Basic realm="Login Required"'}
-    )
-
-def requires_auth(f):
-    """
-    Decorator to prompt for username/password and check them.
-    """
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.username, auth.password):
-            return authenticate()
-        return f(*args, **kwargs)
-    return decorated
 
 def parse_token(token):
     """
@@ -114,7 +81,6 @@ def occupantColor(occupant_list):
     return "#8ae89f"
 
 @app.route("/")
-@requires_auth
 def index():
     # 1) occupant data
     all_data = get_leases_data()
