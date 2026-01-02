@@ -218,6 +218,9 @@ def index():
       color: #000;
       cursor: pointer;
     }
+    .booth-label {
+      display: block;
+    }
     /* Updated styling to make Occupancy & Rent Collection appear side by side */
     .legend-info {
       cursor: default;
@@ -320,8 +323,13 @@ def index():
         div.style.top    = b.y + "px";
         div.style.width  = b.width + "px";
         div.style.height = b.height + "px";
-        div.textContent = b.label;
         div.style.backgroundColor = b.color || "#bdbdbd";
+
+        // Create label span so we can counter-rotate it
+        const label = document.createElement("span");
+        label.className = "booth-label";
+        label.textContent = b.label;
+        div.appendChild(label);
 
         let occList = b.occupants || [];
         if (occList.length > 0) {
@@ -387,6 +395,12 @@ def index():
         ctn.style.transformOrigin = "top left";
         ctn.style.transform = "scale(" + scale + ")";
       }
+
+      // Counter-rotate labels so they stay upright and readable
+      const labels = ctn.querySelectorAll(".booth-label");
+      labels.forEach(label => {
+        label.style.transform = isRotated ? "rotate(-90deg)" : "none";
+      });
     }
 
     function toggleRotation() {
