@@ -355,28 +355,37 @@ def index():
       const availableWidth = pageContent.clientWidth;
 
       if (isRotated) {
-        // When rotated 90deg, the original height becomes the new width
-        // Scale so the rotated map fills the available width
+        // When rotated 90deg, original height becomes width
+        // Scale to fill screen width
         const scale = availableWidth / planeHeight;
 
-        // After rotation, visible dimensions are swapped
-        const visibleWidth = planeHeight * scale;
+        // Final visible size after rotation
+        const visibleWidth = availableWidth;
         const visibleHeight = planeWidth * scale;
 
-        ctn.style.transformOrigin = "top left";
-        ctn.style.transform = "rotate(90deg) translateY(-100%) scale(" + scale + ")";
-
-        wrapper.style.height = visibleHeight + "px";
         wrapper.style.width = visibleWidth + "px";
+        wrapper.style.height = visibleHeight + "px";
+        wrapper.style.position = "relative";
+
+        // Position container at center of wrapper, rotate around its center
+        ctn.style.position = "absolute";
+        ctn.style.left = "50%";
+        ctn.style.top = "50%";
+        ctn.style.transformOrigin = "center center";
+        ctn.style.transform = "translate(-50%, -50%) rotate(90deg) scale(" + scale + ")";
       } else {
         // Portrait mode - scale to fit width
         const scale = Math.min(1, availableWidth / planeWidth);
 
+        wrapper.style.width = (planeWidth * scale) + "px";
+        wrapper.style.height = (planeHeight * scale) + "px";
+        wrapper.style.position = "relative";
+
+        ctn.style.position = "relative";
+        ctn.style.left = "0";
+        ctn.style.top = "0";
         ctn.style.transformOrigin = "top left";
         ctn.style.transform = "scale(" + scale + ")";
-
-        wrapper.style.height = (planeHeight * scale) + "px";
-        wrapper.style.width = (planeWidth * scale) + "px";
       }
     }
 
