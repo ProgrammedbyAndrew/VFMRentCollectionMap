@@ -237,18 +237,27 @@ def index():
       cursor: pointer;
       font-size: 14px;
     }
+    button.rotate-btn {
+      background: #007bff; /* blue */
+    }
+    /* Rotated map state */
+    #mapContainer.rotated {
+      transform-origin: top left;
+    }
+    #mapContainer.rotated .booth {
+      /* Counter-rotate labels so they're readable */
+    }
   </style>
 </head>
 <body>
   <h1>Visitors Flea Market Rent Collection Map</h1>
 
-  <!-- UPDATED: REMOVED target="_blank" -->
   <div style="text-align:center; margin-bottom:10px;">
     <a href="https://wftmap-c2a97a915c23.herokuapp.com/">
       <button>World Food Trucks</button>
     </a>
+    <button class="rotate-btn" onclick="toggleRotation()">Rotate Map</button>
   </div>
-  <!-- END UPDATED BUTTON -->
 
   (% if booths|length > 0 %)
     <div class="pageContent">
@@ -292,9 +301,11 @@ def index():
     </div>
 
     <script>
+    let isRotated = false;
+    let planeWidth  = __PW__;
+    let planeHeight = __PH__;
+
     function initMap() {
-      let planeWidth  = __PW__;
-      let planeHeight = __PH__;
       const ctn = document.getElementById("mapContainer");
 
       ctn.style.width  = planeWidth + "px";
@@ -310,7 +321,7 @@ def index():
         div.style.height = b.height + "px";
 
         div.textContent = b.label;
-        div.style.backgroundColor = b.color || "#bdbdbd"; 
+        div.style.backgroundColor = b.color || "#bdbdbd";
 
         let occList = b.occupants || [];
         if (occList.length > 0) {
@@ -334,15 +345,56 @@ def index():
         ctn.appendChild(div);
       });
 
-      // phone narrower => scale
-      let containerParent = ctn.parentNode;
-      let actualWidth = containerParent.clientWidth;
-      if (planeWidth > 0 && actualWidth < planeWidth) {
-        let scale = actualWidth / planeWidth;
-        ctn.style.transformOrigin = "top left";
-        ctn.style.transform       = "scale(" + scale + ")";
-      }
+      applyScaling();
     }
+
+    function applyScaling() {
+      const ctn = document.getElementById("mapContainer");
+      const containerParent = ctn.parentNode;
+      const actualWidth = containerParent.clientWidth;
+
+      // Determine effective width based on rotation
+      const effectiveWidth = isRotated ? planeHeight : planeWidth;
+
+      if (effectiveWidth > 0 && actualWidth < effectiveWidth) {
+        const scale = actualWidth / effectiveWidth;
+        if (isRotated) {
+          ctn.style.transformOrigin = "top left";
+          ctn.style.transform = "rotate(90deg) translateY(-100%) scale(" + scale + ")";
+          // Adjust container parent height for rotated layout
+          containerParent.style.height = (planeWidth * scale) + "px";
+        } else {
+          ctn.style.transformOrigin = "top left";
+          ctn.style.transform = "scale(" + scale + ")";
+          containerParent.style.height = (planeHeight * scale) + "px";
+        }
+      } else {
+        if (isRotated) {
+          ctn.style.transformOrigin = "top left";
+          ctn.style.transform = "rotate(90deg) translateY(-100%)";
+          containerParent.style.height = planeWidth + "px";
+        } else {
+          ctn.style.transform = "none";
+          containerParent.style.height = planeHeight + "px";
+        }
+      }
+
+      // Counter-rotate booth labels so they stay readable
+      const booths = ctn.querySelectorAll(".booth");
+      booths.forEach(booth => {
+        if (isRotated) {
+          booth.style.transform = "rotate(-90deg)";
+        } else {
+          booth.style.transform = "none";
+        }
+      });
+    }
+
+    function toggleRotation() {
+      isRotated = !isRotated;
+      applyScaling();
+    }
+
     window.onload = initMap;
     </script>
   (% else %)
